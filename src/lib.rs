@@ -30,6 +30,15 @@ impl RandomizedOpening {
         Ok(())
     }
 
+    pub fn to_bytes(self) -> Vec<u8> {
+        self.0.to_bytes()
+    }
+
+    pub fn from_bytes(slice: &[u8]) -> Result<Self, R1CSError> {
+        let proof = R1CSProof::from_bytes(slice)?;
+        Ok(Self(proof))
+    }
+
     pub fn prove<'a, 'b>(
         pc_gens: &'b PedersenGens,
         bp_gens: &'b BulletproofGens,
@@ -38,7 +47,6 @@ impl RandomizedOpening {
         scalar_y: Scalar,
         blind_x: Scalar,
         blind_y: Scalar,
-        output: &[Scalar],
     ) -> Result<
         (
             RandomizedOpening,
@@ -60,7 +68,68 @@ impl RandomizedOpening {
 
         Ok((Self(proof), vec![comm_x, comm_y], vec![]))
     }
+
+    /// Attempt to verify a `ShuffleProof`.
+    pub fn verify<'a, 'b>(
+        &self,
+        pc_gens: &'b PedersenGens,
+        bp_gens: &'b BulletproofGens,
+        transcript: &'a mut Transcript,
+        comm_x: CompressedRistretto,
+        comm_y: CompressedRistretto,
+    ) -> Result<(), R1CSError> {
+        transcript.commit_bytes(b"dom-sep", b"Rerandomization");
+
+        let mut verifier = Verifier::new(transcript);
+
+        let var_x = verifier.commit(comm_x);
+        let var_y = verifier.commit(comm_y);
+
+        Self::gadget(&mut verifier, var_x, var_y)?;
+
+        verifier.verify(&self.0, &pc_gens, &bp_gens)
+    }
 }
 
 #[test]
-fn test_proof() {}
+fn test_proof() {
+    let pc_gens = PedersenGens::default();
+    let bp_gens = BulletproofGens::new(6, 1);
+
+    let scalar_x = Scalar::from(2u64);
+    let scalar_y = Scalar::from(4u64);
+
+    let blind_x = Scalar::from(53753735735u64); // clearly a dummy
+    let blind_y = Scalar::from(46713612753u64);
+
+    let mut prover_transcript = Transcript::new(b"Randomization");
+
+    let (proof, in_commitments, out_commitments) = RandomizedOpening::prove(
+        &pc_gens,
+        &bp_gens,
+        &mut prover_transcript,
+        scalar_x,
+        scalar_y,
+        blind_x,
+        blind_y,
+    )
+    .expect("error during proving");
+
+    let bs = proof.to_bytes();
+
+    println!("{:?} {:?} {:?}", bs.len(), in_commitments, out_commitments);
+
+    let proofP = RandomizedOpening::from_bytes(&bs[..]).unwrap();
+
+    let mut verifier_transcript = Transcript::new(b"Randomization");
+
+    assert!(proofP
+        .verify(
+            &pc_gens,
+            &bp_gens,
+            &mut verifier_transcript,
+            in_commitments[0].clone(),
+            in_commitments[1].clone(),
+        )
+        .is_ok());
+}
