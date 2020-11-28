@@ -6,6 +6,9 @@ use curve25519_dalek::scalar::Scalar;
 
 use merlin::Transcript;
 
+mod curve;
+mod misc;
+
 struct RandomizedOpening(R1CSProof);
 
 impl RandomizedOpening {
