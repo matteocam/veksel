@@ -1,3 +1,4 @@
+
 p = 2^252 + 27742317777372353535851937790883648493
 F = GF(p)
 
@@ -34,53 +35,66 @@ def cm_discreminant(p, o):
     return 4 * I
 
 
-w = 1
-d = F(1)
-
-while 1:
+def check(i):
     a = 1
-    w = w + 1
-    for v in range(1, w):
-        d = F(v) / F(w)
+    d = F(i)
 
-        print(d, '=', v, '/', w)
+    if d.is_square():
+        return None
 
-        if d.is_square():
-            continue
+    print('Edwards Coefficients:', 'a =', a, 'd =', i)
 
-        print('Edwards Coefficients:', a, d)
+    A, B = edwards_to_montgomery(a, d)
+    a, b = montgomery_to_weierstrass(A, B)
 
-        A, B = edwards_to_montgomery(a, d)
-        a, b = montgomery_to_weierstrass(A, B)
+    E = EllipticCurve([0,0,0,a,b])
 
-        E = EllipticCurve([0,0,0,a,b])
+    print(E)
 
-        print(E)
+    o = E.order()
 
-        o = E.order()
+    print('order:', o)
 
-        print('order:', o)
+    assert o % 4 == 0, 'sanity check: necessary for point of order 4'
 
-        assert o % 4 == 0, 'sanity check: necessary for point of order 4'
+    # minimal cofactor of 4
+    if not is_prime(o / 4):
+        return None
 
-        # minimal cofactor of 4
-        if not is_prime(o / 4):
-            continue
+    # order of large group
+    l = o / 4
 
-        # order of large group
-        l = o / 4
+    # check SafeCurves criteria
+    # https://safecurves.cr.yp.to/index.html
 
-        # check SafeCurves criteria
-        # https://safecurves.cr.yp.to/index.html
+    # https://safecurves.cr.yp.to/rho.html
+    print('check sufficient order')
+    if 0.886 * sqrt(l) <= 2^100:
+        print('bad protection against rho method')
+        return None
 
-        # https://safecurves.cr.yp.to/rho.html
-        print('check sufficient order')
-        if 0.886 * sqrt(l) <= 2^100:
-            print('bad protection against rho method')
-            continue
+    # https://safecurves.cr.yp.to/disc.html
+    print('check cm discriminant')
+    if abs(cm_discreminant(p, o)) <= 2^100:
+        print('bad complex-multiplication field discriminant')
+        return None
 
-        # https://safecurves.cr.yp.to/disc.html
-        print('check cm discriminant')
-        if abs(cm_discreminant(p, o)) <= 2^100:
-            print('bad complex-multiplication field discriminant')
-            continue
+    return i
+
+from itertools import chain
+import multiprocessing as mp
+
+if __name__ == '__main__':
+    pool = mp.Pool()
+    bound = 1_000_000_000_000
+
+    positive = range(bound)
+    negative = map(lambda x: -x, range(bound))
+    params = chain.from_iterable(zip(positive, negative))
+
+    for res in pool.imap(check, params):
+        if res is not None:
+            print('Result:', res)
+            with open('found-d.txt', 'w') as f:
+                f.write(str(res) + '\n')
+            break
