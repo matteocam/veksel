@@ -42,23 +42,19 @@ def check(i):
     if d.is_square():
         return None
 
-    print('Edwards Coefficients:', 'a =', a, 'd =', i)
-
     A, B = edwards_to_montgomery(a, d)
     a, b = montgomery_to_weierstrass(A, B)
 
     E = EllipticCurve([0,0,0,a,b])
 
-    print(E)
-
     o = E.order()
 
-    print('order:', o)
+    print(a, i, E, o)
 
     assert o % 4 == 0, 'sanity check: necessary for point of order 4'
 
     # minimal cofactor of 4
-    if not is_prime(o / 4):
+    if not ZZ(o / 4).is_prime():
         return None
 
     # order of large group
