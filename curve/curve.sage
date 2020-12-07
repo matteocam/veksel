@@ -49,7 +49,6 @@ def hash_point(d, s: str):
     while 1:
         x = hash_field(s + '-' + str(n))
         w = (x^2 - 1) / (d * x^2 - 1)
-        print(w)
         if w.is_square():
             x, y = solve(d, x)
             return edwards_scale(d, cofactor, x, y)
@@ -87,3 +86,51 @@ assert edwards_scale(d, l, x1, y1) == (F(0), F(1))
 assert is_prime(l)
 
 edwards_scale(d, l, x0, y0)
+
+b = l.bit_length()
+
+WINDOW_SIZE = 3
+
+def hex_bytes(v, ll=32):
+    return ','.join(['0x%02x' % x for x in v.to_bytes(ll, 'little')])
+
+def scalar(v):
+    return 'Scalar::from_bytes_mod_order(['+ hex_bytes(v) + '])'
+
+def scalar_array(arr):
+    return '[' + ', '.join(map(scalar, arr)) + ']'
+
+def window(x, y):
+    ds = scalar(int(d))
+    windows = []
+    for i in range(0, b, WINDOW_SIZE):
+        X = []
+        Y = []
+        for j in range(0, 2^WINDOW_SIZE):
+            s = 2^i + j
+            xp, yp = edwards_scale(d, s, x, y)
+            X.append(int(xp))
+            Y.append(int(yp))
+
+        windows.append('''EdwardsWindow::new(
+            %s,
+            %s,
+            %s
+    )''' % (ds, scalar_array(X), scalar_array(Y)))
+
+
+    s = ''
+    s += 'use crate::curve::EdwardsWindow;\n'
+    s += 'use curve25519_dalek::scalar::Scalar;\n'
+    s += '\n'
+    s += 'pub fn windows() -> Vec<EdwardsWindow> {'
+    s += '  vec![' + ',\n'.join(windows) + ']\n'
+    s += '}'
+
+    return s
+
+
+print(window(x0, y0))
+
+
+

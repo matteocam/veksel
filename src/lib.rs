@@ -8,6 +8,8 @@ use merlin::Transcript;
 
 mod curve;
 mod misc;
+mod randomization;
+mod window;
 
 struct RandomizedOpening(R1CSProof);
 
@@ -24,12 +26,14 @@ impl RandomizedOpening {
 
     fn gadget<CS: ConstraintSystem>(
         cs: &mut CS,
+        f: Variable,
         x: Variable,
         y: Variable,
     ) -> Result<(), R1CSError> {
         // Baby's first Bulletproof: y = x^2
         let (_, _, r) = cs.multiply(x.into(), x.into());
         cs.constrain(r - y);
+        cs.constrain(r - f);
         Ok(())
     }
 
@@ -62,10 +66,14 @@ impl RandomizedOpening {
 
         let mut prover = Prover::new(&pc_gens, transcript);
 
+        let f = prover.allocate(Some(Scalar::from(4u64))).unwrap();
+
+        let b = misc::Bit::new(&mut prover, true);
+
         let (comm_x, var_x) = prover.commit(scalar_x, blind_y);
         let (comm_y, var_y) = prover.commit(scalar_y, blind_y);
 
-        Self::gadget(&mut prover, var_x, var_y);
+        Self::gadget(&mut prover, f, var_x, var_y)?;
 
         let proof = prover.prove(&bp_gens)?;
 
@@ -85,10 +93,14 @@ impl RandomizedOpening {
 
         let mut verifier = Verifier::new(transcript);
 
+        let f = verifier.allocate(None).unwrap();
+
+        let b = misc::Bit::free(&mut verifier);
+
         let var_x = verifier.commit(comm_x);
         let var_y = verifier.commit(comm_y);
 
-        Self::gadget(&mut verifier, var_x, var_y)?;
+        Self::gadget(&mut verifier, f, var_x, var_y)?;
 
         verifier.verify(&self.0, &pc_gens, &bp_gens)
     }
