@@ -1,0 +1,34 @@
+name: nightly
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  schedule:
+    # run CI every day even if no PRs/merges occur
+    - cron: '0 12 * * *'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@master
+
+      - name: Set toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+            override: true
+            components: rustfmt, clippy
+
+      - name: Format
+        run: cargo fmt
+
+      - name: Build
+        run: cargo build
+
+      - name: Test
+        run: cargo test

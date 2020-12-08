@@ -1,10 +1,6 @@
 use bulletproofs::r1cs::*;
-use bulletproofs::{BulletproofGens, PedersenGens};
 
-use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-
-use merlin::Transcript;
 
 pub const WINDOW_SIZE: usize = 3;
 
@@ -61,7 +57,7 @@ fn curve_add(d: Scalar, a: PointValue, b: PointValue) -> PointValue {
     p
 }
 
-// constrain u = elems[s0 + s1*2 + s2*4] with sA = s1 * s2
+// constrain u = u[s0 + s1*2 + s2*4] with sa = s1 * s2
 #[inline(always)]
 fn lookup<CS: ConstraintSystem>(
     cs: &mut CS,
@@ -177,66 +173,106 @@ impl EdwardsWindow {
 mod tests {
     use super::*;
 
-    use bulletproofs::r1cs::*;
     use bulletproofs::{BulletproofGens, PedersenGens};
-
     use curve25519_dalek::ristretto::CompressedRistretto;
-    use curve25519_dalek::scalar::Scalar;
-
     use merlin::Transcript;
+
+    use rand::thread_rng;
+    use rand::Rng;
 
     #[test]
     fn test_lookup() {
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
 
-        // setup prover
-        let transcript = Transcript::new(b"Test");
-        let mut prover = Prover::new(&pc_gens, transcript);
-
-        // setup verifier
-        let transcript = Transcript::new(b"Test");
-        let mut verifier = Verifier::new(transcript);
+        let mut rng = thread_rng();
 
         let u: [Scalar; 8] = [
-            Scalar::one(),
-            Scalar::one(),
-            Scalar::one(),
-            Scalar::one(),
-            Scalar::one(),
-            Scalar::one(),
-            Scalar::one(),
-            Scalar::one(),
+            Scalar::random(&mut rng),
+            Scalar::random(&mut rng),
+            Scalar::random(&mut rng),
+            Scalar::random(&mut rng),
+            Scalar::random(&mut rng),
+            Scalar::random(&mut rng),
+            Scalar::random(&mut rng),
+            Scalar::random(&mut rng),
         ];
 
-        let s0 = Bit::new(&mut prover, true).unwrap();
-        let s1 = Bit::new(&mut prover, true).unwrap();
-        let s2 = Bit::new(&mut prover, true).unwrap();
-        let sa = Bit::mul(&mut prover, s1, s2);
+        let b0: bool = rng.gen();
+        let b1: bool = rng.gen();
+        let b2: bool = rng.gen();
 
-        let blind_e = Scalar::from(53753735735u64);
-        let value_e = Scalar::one();
+        let i = (b0 as usize) + 2 * (b1 as usize) + 4 * (b2 as usize);
 
-        // prove
+        // happy path
+        {
+            let mut prover = Prover::new(&pc_gens, Transcript::new(b"Test"));
+            let mut verifier = Verifier::new(Transcript::new(b"Test"));
 
-        let (comm_e, input_e) = prover.commit(value_e, blind_e);
+            let s0 = Bit::new(&mut prover, b0).unwrap();
+            let s1 = Bit::new(&mut prover, b1).unwrap();
+            let s2 = Bit::new(&mut prover, b2).unwrap();
+            let sa = Bit::mul(&mut prover, s1, s2);
 
-        lookup(&mut prover, sa, s0, s1, s2, input_e.into(), &u);
+            let blind_e = Scalar::random(&mut rng);
+            let value_e = u[i];
 
-        let proof = prover.prove(&bp_gens).unwrap();
+            // prove
 
-        // verify
+            let (comm_e, input_e) = prover.commit(value_e, blind_e);
 
-        let s0 = Bit::free(&mut verifier).unwrap();
-        let s1 = Bit::free(&mut verifier).unwrap();
-        let s2 = Bit::free(&mut verifier).unwrap();
-        let sa = Bit::mul(&mut verifier, s1, s2);
+            lookup(&mut prover, sa, s0, s1, s2, input_e.into(), &u);
 
-        let input_e = verifier.commit(comm_e);
+            let proof = prover.prove(&bp_gens).unwrap();
 
-        lookup(&mut verifier, sa, s0, s1, s2, input_e.into(), &u);
+            // verify
 
-        verifier.verify(&proof, &pc_gens, &bp_gens).unwrap()
+            let s0 = Bit::free(&mut verifier).unwrap();
+            let s1 = Bit::free(&mut verifier).unwrap();
+            let s2 = Bit::free(&mut verifier).unwrap();
+            let sa = Bit::mul(&mut verifier, s1, s2);
+
+            let input_e = verifier.commit(comm_e);
+
+            lookup(&mut verifier, sa, s0, s1, s2, input_e.into(), &u);
+
+            assert!(verifier.verify(&proof, &pc_gens, &bp_gens).is_ok())
+        }
+
+        // error path
+        {
+            let mut prover = Prover::new(&pc_gens, Transcript::new(b"Test"));
+            let mut verifier = Verifier::new(Transcript::new(b"Test"));
+
+            let s0 = Bit::new(&mut prover, b0).unwrap();
+            let s1 = Bit::new(&mut prover, b1).unwrap();
+            let s2 = Bit::new(&mut prover, b2).unwrap();
+            let sa = Bit::mul(&mut prover, s1, s2);
+
+            let blind_e = Scalar::random(&mut rng);
+            let value_e = Scalar::random(&mut rng);
+
+            // prove
+
+            let (comm_e, input_e) = prover.commit(value_e, blind_e);
+
+            lookup(&mut prover, sa, s0, s1, s2, input_e.into(), &u);
+
+            let proof = prover.prove(&bp_gens).unwrap();
+
+            // verify
+
+            let s0 = Bit::free(&mut verifier).unwrap();
+            let s1 = Bit::free(&mut verifier).unwrap();
+            let s2 = Bit::free(&mut verifier).unwrap();
+            let sa = Bit::mul(&mut verifier, s1, s2);
+
+            let input_e = verifier.commit(comm_e);
+
+            lookup(&mut verifier, sa, s0, s1, s2, input_e.into(), &u);
+
+            assert!(verifier.verify(&proof, &pc_gens, &bp_gens).is_err())
+        }
     }
 
     #[test]

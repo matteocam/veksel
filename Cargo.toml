@@ -1,10 +1,11 @@
 [package]
-name = "voksel"
-version = "0.1.0"
 authors = ["Matteo Campanelli <matteo.campanelli@gmail.com>", "Mathias Hall-Andersen <mathias@hall-andersen.dk>"]
 edition = "2018"
+name = "veksel"
+version = "0.1.0"
 
 [dependencies]
-bulletproofs = { git = "https://github.com/matteocam/bulletproofs", branch= "develop", features=["yoloproofs"] } # R1CS interface
+bulletproofs = {git = "https://github.com/matteocam/bulletproofs", branch = "develop", features = ["yoloproofs"]}# R1CS interface
 curve25519-dalek = "3.0.0"
 merlin = "2.0.0"
+rand = "0.7.3"
