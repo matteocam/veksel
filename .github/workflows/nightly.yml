@@ -16,7 +16,7 @@ jobs:
         platform: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@main
 
       - name: Set toolchain
         uses: actions-rs/toolchain@v1
