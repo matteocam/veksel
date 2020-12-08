@@ -79,18 +79,16 @@ fn lookup<CS: ConstraintSystem>(
 
     // left side
     let (_, _, left): (Variable, Variable, Variable) = cs.multiply(s0.into(), {
-        // line 1 in paper
-        let f = -u[0] * sa + u[0] * s2 + u[0] * s1 - u[0] + u[2] * sa;
-        let f = f - u[2] * s1 + u[4] * sa - u[4] * s2 - u[6] * sa;
-
-        // line 2 in paper
-        let f = f + u[1] * sa - u[1] * s2 + u[1] - u[3] * sa + u[3] * s1;
-        f - u[5] * sa + u[5] * s2 + u[7] * sa
+        let f = -(u[0] * sa) + (u[0] * s2) + (u[0] * s1) - u[0] + (u[2] * sa);
+        let f = f - (u[2] * s1) + (u[4] * sa) - (u[4] * s2) - (u[6] * sa);
+        let f = f + (u[1] * sa) - (u[1] * s2) - (u[1] * s1) + u[1] - (u[3] * sa);
+        let f = f + (u[3] * s1) - (u[5] * sa) + (u[5] * s2) + (u[7] * sa);
+        f
     });
 
     // right size
-    let right: LinearCombination = e - u[0] * sa + u[0] * s2 + u[0] * s1 - u[0] + u[2] * sa;
-    let right = right - u[2] * s1 + u[4] * sa - u[4] * s2 - u[6] * sa;
+    let right: LinearCombination = e - (u[0] * sa) + (u[0] * s2) + (u[0] * s1) - u[0] + (u[2] * sa);
+    let right = right - (u[2] * s1) + (u[4] * sa) - (u[4] * s2) - (u[6] * sa);
 
     // left == right
     cs.constrain(left - right)
@@ -217,7 +215,7 @@ mod tests {
         let sa = Bit::mul(&mut prover, s1, s2);
 
         let blind_e = Scalar::from(53753735735u64);
-        let value_e = Scalar::from(1u64);
+        let value_e = Scalar::one();
 
         // prove
 
