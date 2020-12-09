@@ -31,8 +31,8 @@ impl Bit {
         ))
     }
 
-    pub fn value(&self) -> bool {
-        self.1.expect("unassigned")
+    pub fn value(&self) -> Option<bool> {
+        self.1
     }
 
     pub fn mul<CS: ConstraintSystem>(cs: &mut CS, left: Self, right: Self) -> Self {

@@ -1,4 +1,4 @@
-use crate::curve::EdwardsWindow;
+use super::curve::EdwardsWindow;
 use curve25519_dalek::scalar::Scalar;
 
 pub fn windows() -> Vec<EdwardsWindow> {

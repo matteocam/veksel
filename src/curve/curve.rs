@@ -8,14 +8,14 @@ use crate::misc::{one, Bit};
 
 #[derive(Copy, Clone, Debug)]
 pub struct PointValue {
-    x: Scalar,
-    y: Scalar,
+    pub x: Scalar,
+    pub y: Scalar,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct Point {
-    x: Variable,
-    y: Variable,
+    pub x: Variable,
+    pub y: Variable,
 }
 
 impl Point {
@@ -37,6 +37,28 @@ impl PointValue {
         let x = cs.allocate(Some(self.x))?;
         let y = cs.allocate(Some(self.y))?;
         Ok(Point { x, y })
+    }
+}
+
+pub struct WindowWitness {
+    input: PointValue,
+    output: PointValue,
+    window: PointValue,
+    b0: bool,
+    b1: bool,
+    b2: bool,
+    b: Scalar,
+    a: Scalar,
+    c: Scalar,
+}
+
+impl WindowWitness {
+    pub fn output(&self) -> PointValue {
+        self.output
+    }
+
+    pub fn bits(&self) -> (bool, bool, bool) {
+        (self.b0, self.b1, self.b2)
     }
 }
 
@@ -119,20 +141,34 @@ impl EdwardsWindow {
     /// - s0, s1, s2 (bit decomposition of 3-bit scalar)
     pub fn compute(
         &self,
-        xy: PointValue, // input
-        s0: Bit,        // scalar (0th bit)
-        s1: Bit,        // scalar (1st bit)
-        s2: Bit,        // scalar (2nd bit)
-    ) -> (PointValue, PointValue) {
-        let i0: usize = s0.value() as usize;
-        let i1: usize = s1.value() as usize;
-        let i2: usize = s2.value() as usize;
+        input: PointValue, // input
+        b0: bool,          // scalar (0th bit)
+        b1: bool,          // scalar (1st bit)
+        b2: bool,          // scalar (2nd bit)
+    ) -> WindowWitness {
+        let i0: usize = b0 as usize;
+        let i1: usize = b1 as usize;
+        let i2: usize = b2 as usize;
         let i = i0 + i1 * 2 + i2 * 4;
-        let uv = PointValue {
+        let window = PointValue {
             x: self.u[i],
             y: self.v[i],
         };
-        (uv, curve_add(self.d, xy, uv))
+        let output = curve_add(self.d, input, window);
+        let a = input.x * window.y;
+        let b = input.y * window.x;
+        let c = self.d * a * b;
+        WindowWitness {
+            input,
+            window,
+            output,
+            b0,
+            b1,
+            b2,
+            a,
+            b,
+            c,
+        }
     }
 
     /// Checks that:
@@ -142,31 +178,64 @@ impl EdwardsWindow {
     pub fn gadget<CS: ConstraintSystem>(
         &self,
         cs: &mut CS,
+        witness: Option<&WindowWitness>,
         input: Point, // input point
-        output: Point,
-        window: Point, // window[s]
         s0: Bit,
         s1: Bit,
         s2: Bit, // s = s0 + 2 * s1 + 4 * s2
-    ) -> Result<(), R1CSError> {
-        // constrain "uv" to window lookup
-        let sa = Bit::mul(cs, s1, s2);
-        lookup(cs, sa, s0, s1, s2, window.x.into(), &self.u);
-        lookup(cs, sa, s0, s1, s2, window.y.into(), &self.v);
-
+    ) -> Result<Point, R1CSError> {
         // do edwards addition
-        let (_, _, t) = cs.multiply(input.x + input.y, window.y - window.x);
-        let (_, _, a) = cs.multiply(input.x.into(), window.y.into());
-        let (_, _, b) = cs.multiply(input.y.into(), window.x.into());
+        let (m1, m2, m3, m4) = match witness {
+            Some(w) => {
+                let m1 = cs.allocate_multiplier(Some((w.input.x, w.window.y)))?;
+                let m2 = cs.allocate_multiplier(Some((w.input.y, w.window.x)))?;
+                let m3 = cs.allocate_multiplier(Some((Scalar::one() + w.c, w.output.x)))?;
+                let m4 = cs.allocate_multiplier(Some((Scalar::one() - w.c, w.output.y)))?;
+                (m1, m2, m3, m4)
+            }
+            None => {
+                let m1 = cs.allocate_multiplier(None)?;
+                let m2 = cs.allocate_multiplier(None)?;
+                let m3 = cs.allocate_multiplier(None)?;
+                let m4 = cs.allocate_multiplier(None)?;
+                (m1, m2, m3, m4)
+            }
+        };
+
+        let (input_x, window_y, a) = m1;
+        let (input_y, window_x, b) = m2;
+        let (one_p_c, output_x, left1) = m3;
+        let (one_m_c, output_y, left2) = m4;
+
+        let (_, _, t) = cs.multiply(input.x + input.y, window_y - window_x);
         let (_, _, c) = cs.multiply(self.d * a, b.into());
 
-        let (_, _, left) = cs.multiply(one() + c, output.x.into());
-        cs.constrain(left - (a + b));
+        cs.constrain(input_x - input.x);
+        cs.constrain(input_y - input.y);
+        cs.constrain(one() + c - one_p_c);
+        cs.constrain(one() - c - one_m_c);
+        cs.constrain(left1 - (a + b));
+        cs.constrain(left2 - (t - a + b));
 
-        let (_, _, left) = cs.multiply(one() - c, output.y.into());
-        cs.constrain(left - (t - a + b));
+        // constrain "window" to window lookup
+        let sa = Bit::mul(cs, s1, s2);
+        lookup(cs, sa, s0, s1, s2, window_x.into(), &self.u);
+        lookup(cs, sa, s0, s1, s2, window_y.into(), &self.v);
 
-        Ok(())
+        // the result should fit on the curve
+        // (only checked for each individual window in tests)
+        #[cfg(debug_assertions)]
+        if cfg!(test) {
+            let (_, _, x2) = cs.multiply(output_x.into(), output_x.into());
+            let (_, _, y2) = cs.multiply(output_y.into(), output_y.into());
+            let (_, _, x2y2) = cs.multiply(x2.into(), y2.into());
+            cs.constrain((x2 + y2) - (one() + self.d * x2y2));
+        };
+
+        Ok(Point {
+            x: output_x,
+            y: output_y,
+        })
     }
 }
 
@@ -388,7 +457,7 @@ mod tests {
         let s1 = Bit::new(&mut prover, true).unwrap();
         let s2 = Bit::new(&mut prover, true).unwrap();
 
-        let (window, output) = ed_window.compute(input, s0, s1, s2);
+        let witness = ed_window.compute(input, true, true, true);
 
         let blind_x = Scalar::from(53753735735u64); // clearly a dummy
         let blind_y = Scalar::from(46713612753u64);
@@ -402,11 +471,9 @@ mod tests {
             x: input_x,
             y: input_y,
         };
-        let output = output.assign(&mut prover).unwrap();
-        let window = window.assign(&mut prover).unwrap();
 
         ed_window
-            .gadget(&mut prover, input, output, window, s0, s1, s2)
+            .gadget(&mut prover, Some(&witness), input, s0, s1, s2)
             .unwrap();
 
         let proof = prover.prove(&bp_gens).unwrap();
@@ -424,11 +491,9 @@ mod tests {
             x: input_x,
             y: input_y,
         };
-        let output = Point::free(&mut verifier).unwrap();
-        let window = Point::free(&mut verifier).unwrap();
 
         ed_window
-            .gadget(&mut verifier, input, output, window, s0, s1, s2)
+            .gadget(&mut verifier, None, input, s0, s1, s2)
             .unwrap();
 
         verifier.verify(&proof, &pc_gens, &bp_gens).unwrap()

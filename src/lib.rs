@@ -1,3 +1,7 @@
+#![feature(test)]
+
+extern crate test;
+
 use bulletproofs::r1cs::*;
 use bulletproofs::{BulletproofGens, PedersenGens};
 
@@ -9,7 +13,6 @@ use merlin::Transcript;
 mod curve;
 mod misc;
 mod randomization;
-mod window;
 
 struct RandomizedOpening(R1CSProof);
 
