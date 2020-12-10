@@ -1,16 +1,17 @@
 use bulletproofs::r1cs::*;
 
-use super::curve::{EdwardsWindow, Point, PointValue, WindowWitness, WINDOW_SIZE};
+use super::curve::{EdwardsWindow, WindowWitness, WINDOW_SIZE};
 use super::windows::*;
+use super::*;
 
 use crate::misc::Bit;
 
-struct Witness {
+pub struct RandomizationWitness {
     input: PointValue,
     window_witness: Vec<WindowWitness>,
 }
 
-struct Rerandomization {
+pub struct Rerandomization {
     windows: Vec<EdwardsWindow>,
 }
 
@@ -23,22 +24,22 @@ impl Rerandomization {
         Rerandomization { windows: windows() }
     }
 
-    pub fn compute(&self, input: PointValue, scalar: &[bool]) -> Witness {
-        assert_eq!(scalar.len(), self.len());
+    pub fn compute(&self, input: PointValue, scalar: Scalar) -> RandomizationWitness {
+        let bits = bits(scalar);
 
         let mut intermediate = input;
         let mut window_witness = Vec::with_capacity(self.windows.len());
         for (i, window) in self.windows.iter().enumerate() {
             let j = i * WINDOW_SIZE;
-            let b0 = scalar[j];
-            let b1 = scalar[j + 1];
-            let b2 = scalar[j + 2];
+            let b0 = bits[j];
+            let b1 = bits[j + 1];
+            let b2 = bits[j + 2];
             let w = window.compute(intermediate, b0, b1, b2);
             intermediate = w.output();
             window_witness.push(w);
         }
 
-        Witness {
+        RandomizationWitness {
             input,
             window_witness,
         }
@@ -47,7 +48,7 @@ impl Rerandomization {
     fn gadget<CS: ConstraintSystem>(
         &self,
         cs: &mut CS,
-        witness: Option<&Witness>,
+        witness: Option<&RandomizationWitness>,
         input: Point,
     ) -> Result<Point, R1CSError> {
         let mut bits: Vec<(Bit, Bit, Bit)> = Vec::with_capacity(self.windows.len() / WINDOW_SIZE);
@@ -106,17 +107,14 @@ mod tests {
         // pick random scalar
 
         let mut rng = thread_rng();
-        let mut scalar: Vec<bool> = vec![];
-        for _ in 0..randomize.len() {
-            scalar.push(rng.gen());
-        }
+        let scalar = Scalar::random(&mut rng);
+        let witness = randomize.compute(input, scalar);
 
-        let witness = randomize.compute(input, &scalar[..]);
         b.iter(|| {
             let transcript = Transcript::new(b"Test");
             let mut prover = Prover::new(&pc_gens, transcript);
-            let blind_x = Scalar::from(53753735735u64); // clearly a dummy
-            let blind_y = Scalar::from(46713612753u64);
+            let blind_x = Scalar::random(&mut rng);
+            let blind_y = Scalar::random(&mut rng);
             let (comm_x, input_x) = prover.commit(input.x, blind_x);
             let (comm_y, input_y) = prover.commit(input.y, blind_y);
             let input = Point {
@@ -147,12 +145,8 @@ mod tests {
         // pick random scalar
 
         let mut rng = thread_rng();
-        let mut scalar: Vec<bool> = vec![];
-        for _ in 0..randomize.len() {
-            scalar.push(rng.gen());
-        }
-
-        let witness = randomize.compute(input, &scalar[..]);
+        let scalar = Scalar::random(&mut rng);
+        let witness = randomize.compute(input, scalar);
 
         let transcript = Transcript::new(b"Test");
         let mut prover = Prover::new(&pc_gens, transcript);
@@ -206,17 +200,13 @@ mod tests {
         // pick random scalar
 
         let mut rng = thread_rng();
-        let mut scalar: Vec<bool> = vec![];
-        for _ in 0..randomize.len() {
-            scalar.push(rng.gen());
-        }
-
-        let witness = randomize.compute(input, &scalar[..]);
+        let scalar = Scalar::random(&mut rng);
+        let witness = randomize.compute(input, scalar);
 
         // prove
 
-        let blind_x = Scalar::from(53753735735u64); // clearly a dummy
-        let blind_y = Scalar::from(46713612753u64);
+        let blind_x = Scalar::random(&mut rng); // clearly a dummy
+        let blind_y = Scalar::random(&mut rng);
 
         let (comm_x, input_x) = prover.commit(input.x, blind_x);
         let (comm_y, input_y) = prover.commit(input.y, blind_y);
