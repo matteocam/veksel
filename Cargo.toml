@@ -7,5 +7,10 @@ version = "0.1.0"
 [dependencies]
 bulletproofs = {git = "https://github.com/matteocam/bulletproofs", branch = "develop", features = ["yoloproofs"]}# R1CS interface
 curve25519-dalek = "3.0.0"
+gridiron = "0.8"
 merlin = "2.0.0"
+num-traits = "0.2.14"
 rand = "0.7.3"
+
+[dev-dependencies]
+proptest = "0.10.1"
