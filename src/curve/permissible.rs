@@ -147,3 +147,68 @@ impl Permissible {
         Ok(Point { x: x_1, y: y_1 })
     }
 }
+
+mod tests {
+    /*
+    #[test]
+    fn test_permissible() {
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(2100, 1);
+        let transcript = Transcript::new(b"Test");
+        let mut prover = Prover::new(&pc_gens, transcript);
+
+        let transcript = Transcript::new(b"Test");
+        let mut verifier = Verifier::new(transcript);
+
+        let randomize = Rerandomization::new();
+
+        // compute witness
+
+        let input = PointValue {
+            x: Scalar::one(),
+            y: Scalar::zero(),
+        };
+
+        // pick random scalar
+
+        let mut rng = thread_rng();
+        let scalar = Scalar::random(&mut rng);
+        let witness = randomize.compute(input, scalar);
+
+        // prove
+
+        let blind_x = Scalar::random(&mut rng); // clearly a dummy
+        let blind_y = Scalar::random(&mut rng);
+
+        let (comm_x, input_x) = prover.commit(input.x, blind_x);
+        let (comm_y, input_y) = prover.commit(input.y, blind_y);
+
+        let input = Point {
+            x: input_x,
+            y: input_y,
+        };
+
+        randomize
+            .gadget(&mut prover, Some(&witness), input)
+            .unwrap();
+
+        // println!("{:?}", prover.multipliers_len());
+
+        let proof = prover.prove(&bp_gens).unwrap();
+
+        // verify
+
+        let input_x = verifier.commit(comm_x);
+        let input_y = verifier.commit(comm_y);
+
+        let input = Point {
+            x: input_x,
+            y: input_y,
+        };
+
+        randomize.gadget(&mut verifier, None, input).unwrap();
+
+        verifier.verify(&proof, &pc_gens, &bp_gens).unwrap()
+    }
+    */
+}

@@ -3,8 +3,20 @@ mod permissible;
 mod rerandomize;
 mod windows;
 
+use rand::Rng;
+use rand::RngCore;
+
 use bulletproofs::r1cs::*;
 use curve25519_dalek::scalar::Scalar;
+
+pub use windows::fp_inner::Fp256 as FpInner;
+
+impl FpInner {
+    pub fn random<R: RngCore>(rng: &mut R) -> Self {
+        let limbs: [u8; 32] = rng.gen();
+        limbs.into()
+    }
+}
 
 pub use rerandomize::{RandomizationWitness, Rerandomization};
 

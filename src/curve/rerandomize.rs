@@ -24,16 +24,16 @@ impl Rerandomization {
         Rerandomization { windows: windows() }
     }
 
-    pub fn compute(&self, input: PointValue, scalar: Scalar) -> RandomizationWitness {
-        let bits = bits(scalar);
+    pub fn compute(&self, input: PointValue, scalar: FpInner) -> RandomizationWitness {
+        let mut bits = scalar.iter_bit().map(|b| b.0 != 0);
 
         let mut intermediate = input;
         let mut window_witness = Vec::with_capacity(self.windows.len());
         for (i, window) in self.windows.iter().enumerate() {
             let j = i * WINDOW_SIZE;
-            let b0 = bits[j];
-            let b1 = bits[j + 1];
-            let b2 = bits[j + 2];
+            let b0 = bits.next().unwrap_or(false);
+            let b1 = bits.next().unwrap_or(false);
+            let b2 = bits.next().unwrap_or(false);
             let w = window.compute(intermediate, b0, b1, b2);
             intermediate = w.output();
             window_witness.push(w);
@@ -107,7 +107,7 @@ mod tests {
         // pick random scalar
 
         let mut rng = thread_rng();
-        let scalar = Scalar::random(&mut rng);
+        let scalar = FpInner::random(&mut rng);
         let witness = randomize.compute(input, scalar);
 
         b.iter(|| {
@@ -145,7 +145,7 @@ mod tests {
         // pick random scalar
 
         let mut rng = thread_rng();
-        let scalar = Scalar::random(&mut rng);
+        let scalar = FpInner::random(&mut rng);
         let witness = randomize.compute(input, scalar);
 
         let transcript = Transcript::new(b"Test");
@@ -200,7 +200,7 @@ mod tests {
         // pick random scalar
 
         let mut rng = thread_rng();
-        let scalar = Scalar::random(&mut rng);
+        let scalar = FpInner::random(&mut rng);
         let witness = randomize.compute(input, scalar);
 
         // prove
