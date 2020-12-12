@@ -13,18 +13,6 @@ use merlin::Transcript;
 mod curve;
 mod misc;
 
-struct Statement {
-    rerandomize: curve::Rerandomization,
-}
-
-impl Statement {
-    fn new() -> Statement {
-        Statement {
-            rerandomize: curve::Rerandomization::new(),
-        }
-    }
-}
-
 struct RandomizedOpening(R1CSProof);
 
 impl RandomizedOpening {

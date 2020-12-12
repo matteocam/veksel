@@ -1,24 +1,56 @@
 mod curve;
 mod permissible;
-mod rerandomize;
-mod windows;
+mod window;
 
-use rand::Rng;
-use rand::RngCore;
+use rand::{Rng, RngCore};
 
 use bulletproofs::r1cs::*;
 use curve25519_dalek::scalar::Scalar;
 
-pub use windows::fp_inner::Fp256 as FpInner;
+pub use curve::fp_inner::Fp256 as FpInner;
+pub use permissible::{Permissible, PermissibleWitness};
+pub use window::{FixScalarMult, FixScalarMultWitness};
 
-impl FpInner {
+impl curve::Fp {
     pub fn random<R: RngCore>(rng: &mut R) -> Self {
         let limbs: [u8; 32] = rng.gen();
         limbs.into()
     }
 }
 
-pub use rerandomize::{RandomizationWitness, Rerandomization};
+pub struct Statement {
+    rerandomize: FixScalarMult,
+    permissible: Permissible,
+}
+
+pub struct StatementWitness {}
+
+impl Statement {
+    pub fn find_permissible_randomness<R: RngCore>(
+        &self,
+        rng: &mut R,
+        xy: PointValue,
+    ) -> curve::Fp {
+        loop {
+            let r = curve::Fp::random(rng); // commitment randomness
+            let c = self.rerandomize.compute(r, xy); // randomized commitment
+            if self.permissible.is_permissible(c) {
+                break r;
+            }
+        }
+    }
+
+    pub fn witness(
+        &self,
+        xy: PointValue, // commitment without randomness
+        r: curve::Fp,   // randomness for Pedersen commitment
+    ) -> StatementWitness {
+        let permissble = self.permissible.witness(xy);
+        unimplemented!()
+    }
+
+    pub fn gadget<CS: ConstraintSystem>() {}
+}
 
 #[derive(Copy, Clone, Debug)]
 pub struct PointValue {
@@ -41,13 +73,20 @@ impl Point {
 }
 
 impl PointValue {
-    fn check(&self, d: Scalar) -> bool {
+    pub fn identity() -> Self {
+        Self {
+            x: Scalar::one(),
+            y: Scalar::zero(),
+        }
+    }
+
+    pub fn check(&self, d: Scalar) -> bool {
         let x2 = self.x * self.x;
         let y2 = self.y * self.y;
         x2 + y2 == Scalar::one() + d * x2 * y2
     }
 
-    fn assign<CS: ConstraintSystem>(&self, cs: &mut CS) -> Result<Point, R1CSError> {
+    pub fn assign<CS: ConstraintSystem>(&self, cs: &mut CS) -> Result<Point, R1CSError> {
         let x = cs.allocate(Some(self.x))?;
         let y = cs.allocate(Some(self.y))?;
         Ok(Point { x, y })

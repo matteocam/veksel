@@ -45,7 +45,7 @@ impl Permissible {
         p.check(self.d) && (x_bytes[31] < 4) && (y_bytes[0] & 1 == 0)
     }
 
-    pub fn compute(&self, point: PointValue) -> PermissibleWitness {
+    pub fn witness(&self, point: PointValue) -> PermissibleWitness {
         let mut x_bits = bits(point.x);
         let mut y_bits = bits(point.y);
 
@@ -149,7 +149,17 @@ impl Permissible {
 }
 
 mod tests {
-    /*
+    use super::*;
+
+    use bulletproofs::r1cs::ConstraintSystem;
+    use bulletproofs::{BulletproofGens, PedersenGens};
+    use curve25519_dalek::ristretto::CompressedRistretto;
+    use curve25519_dalek::scalar::Scalar;
+    use merlin::Transcript;
+
+    use rand::thread_rng;
+    use rand::Rng;
+
     #[test]
     fn test_permissible() {
         let pc_gens = PedersenGens::default();
@@ -159,56 +169,5 @@ mod tests {
 
         let transcript = Transcript::new(b"Test");
         let mut verifier = Verifier::new(transcript);
-
-        let randomize = Rerandomization::new();
-
-        // compute witness
-
-        let input = PointValue {
-            x: Scalar::one(),
-            y: Scalar::zero(),
-        };
-
-        // pick random scalar
-
-        let mut rng = thread_rng();
-        let scalar = Scalar::random(&mut rng);
-        let witness = randomize.compute(input, scalar);
-
-        // prove
-
-        let blind_x = Scalar::random(&mut rng); // clearly a dummy
-        let blind_y = Scalar::random(&mut rng);
-
-        let (comm_x, input_x) = prover.commit(input.x, blind_x);
-        let (comm_y, input_y) = prover.commit(input.y, blind_y);
-
-        let input = Point {
-            x: input_x,
-            y: input_y,
-        };
-
-        randomize
-            .gadget(&mut prover, Some(&witness), input)
-            .unwrap();
-
-        // println!("{:?}", prover.multipliers_len());
-
-        let proof = prover.prove(&bp_gens).unwrap();
-
-        // verify
-
-        let input_x = verifier.commit(comm_x);
-        let input_y = verifier.commit(comm_y);
-
-        let input = Point {
-            x: input_x,
-            y: input_y,
-        };
-
-        randomize.gadget(&mut verifier, None, input).unwrap();
-
-        verifier.verify(&proof, &pc_gens, &bp_gens).unwrap()
     }
-    */
 }
