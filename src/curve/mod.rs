@@ -187,6 +187,42 @@ mod tests {
     use rand::thread_rng;
     use rand::Rng;
 
+    use test::Bencher;
+
+    #[bench]
+    fn verify_statement(b: &mut Bencher) {
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(3000, 1);
+        let transcript = Transcript::new(b"Test");
+        let mut prover = Prover::new(&pc_gens, transcript);
+
+        let mut rng = thread_rng();
+        let xy = curve::identity();
+        let statement = Statement::new(curve::param_d());
+
+        let (r, comm) = statement.find_permissible_randomness(&mut rng, xy);
+
+        let witness = statement.witness(comm, -r);
+
+        let blind_x = Scalar::random(&mut rng);
+
+        let (comm_x, input_x) = prover.commit(comm.x, blind_x);
+
+        statement
+            .gadget(&mut prover, Some(&witness), input_x, xy)
+            .unwrap();
+
+        let proof = prover.prove(&bp_gens).unwrap();
+
+        b.iter(|| {
+            let transcript = Transcript::new(b"Test");
+            let mut verifier = Verifier::new(transcript);
+            let input_x = verifier.commit(comm_x);
+            statement.gadget(&mut verifier, None, input_x, xy).unwrap();
+            verifier.verify(&proof, &pc_gens, &bp_gens).unwrap();
+        })
+    }
+
     #[test]
     fn test_statement() {
         let pc_gens = PedersenGens::default();
