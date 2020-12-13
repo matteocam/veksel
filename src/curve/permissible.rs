@@ -40,19 +40,23 @@ impl Permissible {
         let x_bytes = p.x.as_bytes();
         let y_bytes = p.y.as_bytes();
 
+        // todo: check if prime
+
+        // (x, y) is a point on the curve
         // x[31] \in {0, 1} -> x \in [0, 2^250]
         // y mod 2 == 0
         p.check(self.d) && (x_bytes[31] < 4) && (y_bytes[0] & 1 == 0)
     }
 
     pub fn witness(&self, point: PointValue) -> PermissibleWitness {
+        debug_assert!(self.is_permissible(point));
+
         let mut x_bits = bits(point.x);
         let mut y_bits = bits(point.y);
 
         x_bits.truncate(SIZE_X_BITS);
         y_bits.truncate(SIZE_Y_BITS);
 
-        debug_assert!(self.is_permissible(point));
         debug_assert_eq!(y_bits[0], false);
 
         PermissibleWitness {

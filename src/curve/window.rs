@@ -35,12 +35,16 @@ impl FixScalarMult {
     pub fn new(d: Scalar, base: PointValue) -> Self {
         let mut current = base;
         let mut windows = Vec::with_capacity(WINDOWS);
-        for _ in 0..WINDOW_ELEMS {
-            let win = EdwardsWindow::new(d, current, base);
-            current = PointValue {
-                x: win.u[WINDOW_ELEMS - 1],
-                y: win.v[WINDOW_ELEMS - 1],
-            };
+        for _ in 0..WINDOWS {
+            let win = EdwardsWindow::new(d, current);
+            current = curve_add(
+                d,
+                current,
+                PointValue {
+                    x: win.u[WINDOW_ELEMS - 1],
+                    y: win.v[WINDOW_ELEMS - 1],
+                },
+            );
             windows.push(win);
         }
         Self { d, windows }
@@ -48,7 +52,7 @@ impl FixScalarMult {
 
     pub fn compute(&self, scalar: curve::Fp, mut point: PointValue) -> PointValue {
         let mut bits = scalar.iter_bit().map(|b| b.0);
-        for j in 0..WINDOW_ELEMS {
+        for j in 0..WINDOWS {
             let b0 = bits.next().unwrap_or(0) as usize;
             let b1 = bits.next().unwrap_or(0) as usize;
             let b2 = bits.next().unwrap_or(0) as usize;
@@ -62,6 +66,7 @@ impl FixScalarMult {
             };
             point = curve_add(self.d, p, point);
         }
+        debug_assert!(bits.next().is_none());
         point
     }
 
@@ -71,7 +76,6 @@ impl FixScalarMult {
         let mut intermediate = input;
         let mut window_witness = Vec::with_capacity(self.windows.len());
         for (i, window) in self.windows.iter().enumerate() {
-            let j = i * WINDOW_SIZE;
             let b0 = bits.next().unwrap_or(false);
             let b1 = bits.next().unwrap_or(false);
             let b2 = bits.next().unwrap_or(false);
@@ -86,7 +90,7 @@ impl FixScalarMult {
         }
     }
 
-    fn gadget<CS: ConstraintSystem>(
+    pub fn gadget<CS: ConstraintSystem>(
         &self,
         cs: &mut CS,
         witness: Option<&FixScalarMultWitness>,
@@ -133,17 +137,6 @@ pub struct EdwardsWindow {
     v: [Scalar; WINDOW_ELEMS],
 }
 
-fn curve_add(d: Scalar, a: PointValue, b: PointValue) -> PointValue {
-    debug_assert!(a.check(d));
-    debug_assert!(b.check(d));
-    let p = d * a.x * a.y * b.x * b.y;
-    let x = (a.x * b.y + b.x * a.y) * (Scalar::one() + p).invert();
-    let y = (a.y * b.y - a.x * b.x) * (Scalar::one() - p).invert();
-    let p = PointValue { x, y };
-    debug_assert!(p.check(d));
-    p
-}
-
 // constrain u = u[s0 + s1*2 + s2*4] with sa = s1 * s2
 #[inline(always)]
 fn lookup<CS: ConstraintSystem>(
@@ -178,14 +171,14 @@ fn lookup<CS: ConstraintSystem>(
 }
 
 impl EdwardsWindow {
-    pub fn new(d: Scalar, p0: PointValue, g: PointValue) -> Self {
-        let p1 = curve_add(d, p0, g);
-        let p2 = curve_add(d, p1, g);
-        let p3 = curve_add(d, p2, g);
-        let p4 = curve_add(d, p3, g);
-        let p5 = curve_add(d, p4, g);
-        let p6 = curve_add(d, p5, g);
-        let p7 = curve_add(d, p6, g);
+    pub fn new(d: Scalar, p1: PointValue) -> Self {
+        let p0 = curve::identity();
+        let p2 = curve_add(d, p1, p1);
+        let p3 = curve_add(d, p2, p1);
+        let p4 = curve_add(d, p3, p1);
+        let p5 = curve_add(d, p4, p1);
+        let p6 = curve_add(d, p5, p1);
+        let p7 = curve_add(d, p6, p1);
         EdwardsWindow {
             d,
             u: [p0.x, p1.x, p2.x, p3.x, p4.x, p5.x, p6.x, p7.x],
@@ -333,8 +326,36 @@ mod tests {
 
     use test::Bencher;
 
+    use num_traits::One;
+
+    fn scalar_mult(d: Scalar, scalar: curve::Fp, p: PointValue) -> PointValue {
+        let mut pow = p;
+        let mut res = curve::identity();
+        for b in scalar.iter_bit().map(|b| b.0 != 0) {
+            if b {
+                res = curve_add(d, res, pow);
+            }
+            pow = curve_add(d, pow, pow);
+        }
+        res
+    }
+
     #[test]
-    fn test_lookup() {
+    fn test_randomization_compute() {
+        let mut rng = thread_rng();
+        let randomize = FixScalarMult::new(curve::param_d(), curve::generator());
+        let scalar = curve::Fp::random(&mut rng);
+        let point = randomize.compute(scalar, curve::identity());
+        let real = scalar_mult(curve::param_d(), scalar, curve::generator());
+        println!(
+            "scalar = {:?}, -scalar = {:?}, point = {:?}",
+            scalar, -scalar, point
+        );
+        assert_eq!(point, real);
+    }
+
+    #[test]
+    fn test_lookup_proof() {
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
 
@@ -429,14 +450,13 @@ mod tests {
     }
 
     #[test]
-    fn test_window() {
+    fn test_window_proof() {
         let ed_window = EdwardsWindow::new(
             Scalar::from_bytes_mod_order([
                 0x33, 0xd1, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9,
                 0xde, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x10,
             ]),
-            PointValue::identity(),
             curve::generator(),
         );
 
@@ -590,7 +610,7 @@ mod tests {
     }
 
     #[test]
-    fn test_randomize() {
+    fn test_randomize_proof() {
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(2100, 1);
         let transcript = Transcript::new(b"Test");
@@ -601,16 +621,13 @@ mod tests {
 
         let randomize = FixScalarMult::new(curve::param_d(), curve::generator());
 
-        // compute witness
+        // pick random point
 
-        let input = PointValue {
-            x: Scalar::one(),
-            y: Scalar::zero(),
-        };
+        let mut rng = thread_rng();
+        let input = randomize.compute(curve::Fp::random(&mut rng), curve::identity());
 
         // pick random scalar
 
-        let mut rng = thread_rng();
         let scalar = curve::Fp::random(&mut rng);
         let witness = randomize.witness(input, scalar);
 

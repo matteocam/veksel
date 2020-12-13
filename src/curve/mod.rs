@@ -18,24 +18,53 @@ impl curve::Fp {
     }
 }
 
+fn curve_add(d: Scalar, a: PointValue, b: PointValue) -> PointValue {
+    debug_assert!(a.check(d));
+    debug_assert!(b.check(d));
+    let p = d * a.x * a.y * b.x * b.y;
+    let x = (a.x * b.y + b.x * a.y) * (Scalar::one() + p).invert();
+    let y = (a.y * b.y - a.x * b.x) * (Scalar::one() - p).invert();
+    let p = PointValue { x, y };
+    debug_assert!(p.check(d));
+    p
+}
+
+#[test]
+fn test_identity() {
+    assert_eq!(
+        curve_add(curve::param_d(), curve::identity(), curve::generator()),
+        curve::generator()
+    );
+}
+
 pub struct Statement {
     rerandomize: FixScalarMult,
     permissible: Permissible,
 }
 
-pub struct StatementWitness {}
+pub struct StatementWitness {
+    rerandomize: FixScalarMultWitness,
+    permissible: PermissibleWitness,
+}
 
 impl Statement {
+    pub fn new(d: Scalar) -> Self {
+        Statement {
+            rerandomize: FixScalarMult::new(d, curve::generator()),
+            permissible: Permissible::new(d),
+        }
+    }
+
     pub fn find_permissible_randomness<R: RngCore>(
         &self,
         rng: &mut R,
         xy: PointValue,
-    ) -> curve::Fp {
+    ) -> (curve::Fp, PointValue) {
         loop {
             let r = curve::Fp::random(rng); // commitment randomness
-            let c = self.rerandomize.compute(r, xy); // randomized commitment
-            if self.permissible.is_permissible(c) {
-                break r;
+            let comm = self.rerandomize.compute(r, xy); // randomized commitment
+            if self.permissible.is_permissible(comm) {
+                break (r, comm);
             }
         }
     }
@@ -45,14 +74,39 @@ impl Statement {
         xy: PointValue, // commitment without randomness
         r: curve::Fp,   // randomness for Pedersen commitment
     ) -> StatementWitness {
-        let permissble = self.permissible.witness(xy);
-        unimplemented!()
+        assert!(self.permissible.is_permissible(xy), "not a valid witness");
+        let permissible = self.permissible.witness(xy);
+        let rerandomize = self.rerandomize.witness(xy, r);
+        StatementWitness {
+            permissible,
+            rerandomize,
+        }
     }
 
-    pub fn gadget<CS: ConstraintSystem>() {}
+    pub fn gadget<CS: ConstraintSystem>(
+        &self,
+        cs: &mut CS,
+        witness: Option<&StatementWitness>,
+        x: Variable,      // input point (hidden, described by x coordinate only)
+        xy_r: PointValue, // rerandomized point (public)
+    ) -> Result<(), R1CSError> {
+        // check permissible
+        let point = self
+            .permissible
+            .gadget(cs, witness.map(|x| &x.permissible))?;
+        cs.constrain(point.x - x);
+
+        // apply re-randomization
+        let point_r = self
+            .rerandomize
+            .gadget(cs, witness.map(|x| &x.rerandomize), point)?;
+        // cs.constrain(point_r.x - xy_r.x);
+        // cs.constrain(point_r.y - xy_r.y);
+        Ok(())
+    }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct PointValue {
     pub x: Scalar,
     pub y: Scalar,
@@ -119,4 +173,58 @@ pub fn bits(s: Scalar) -> Vec<bool> {
         debug_assert_eq!(bits >> 1, 0);
     }
     v
+}
+
+mod tests {
+    use super::*;
+
+    use bulletproofs::r1cs::ConstraintSystem;
+    use bulletproofs::{BulletproofGens, PedersenGens};
+    use curve25519_dalek::ristretto::CompressedRistretto;
+    use curve25519_dalek::scalar::Scalar;
+    use merlin::Transcript;
+
+    use rand::thread_rng;
+    use rand::Rng;
+
+    #[test]
+    fn test_statement() {
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(3000, 1);
+        let transcript = Transcript::new(b"Test");
+        let mut prover = Prover::new(&pc_gens, transcript);
+
+        let transcript = Transcript::new(b"Test");
+        let mut verifier = Verifier::new(transcript);
+
+        let mut rng = thread_rng();
+        let xy = curve::identity();
+        let statement = Statement::new(curve::param_d());
+
+        let (r, comm) = statement.find_permissible_randomness(&mut rng, xy);
+
+        println!("{:?} {:?}", r, comm);
+
+        let witness = statement.witness(comm, -r);
+
+        let blind_x = Scalar::random(&mut rng);
+
+        let (comm_x, input_x) = prover.commit(comm.x, blind_x);
+
+        statement
+            .gadget(&mut prover, Some(&witness), input_x, xy)
+            .unwrap();
+
+        let proof = prover.prove(&bp_gens).unwrap();
+
+        // verify
+
+        let input_x = verifier.commit(comm_x);
+
+        statement.gadget(&mut verifier, None, input_x, xy).unwrap();
+
+        verifier.verify(&proof, &pc_gens, &bp_gens).unwrap();
+
+        println!("{:?}", proof.serialized_size());
+    }
 }

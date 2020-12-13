@@ -44,6 +44,13 @@ pub fn param_d() -> Scalar {
     ])
 }
 
+pub fn identity() -> PointValue {
+    PointValue {
+        x: Scalar::zero(),
+        y: Scalar::one(),
+    }
+}
+
 pub fn generator() -> PointValue {
     PointValue {
         x: Scalar::from_bits([
