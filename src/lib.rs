@@ -2,108 +2,86 @@
 
 extern crate test;
 
-use bulletproofs::r1cs::*;
+mod statement;
+
+use merlin::Transcript;
+
+use bulletproofs::r1cs::{Prover, R1CSProof, Verifier};
 use bulletproofs::{BulletproofGens, PedersenGens};
+
+use statement::{curve, PointValue, Statement};
+
+use rand::RngCore;
+use rand_core::OsRng;
 
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 
-use merlin::Transcript;
+struct Rerandomization {
+    bp_gens: BulletproofGens,
+    pc_gens: PedersenGens,
+    statement: Statement,
+}
 
-mod curve;
-mod misc;
+struct Proof(R1CSProof);
 
-struct RandomizedOpening(R1CSProof);
-
-impl RandomizedOpening {
-    fn gadget_edwards_window<CS: ConstraintSystem>(
-        cs: &mut CS,
-        s0: Variable,
-        s1: Variable,
-        s2: Variable, // s = s0 + 2 * s1 + 4 * s2
-    ) -> Result<(), R1CSError> {
-        // do window lookup
-        Ok(())
+impl Rerandomization {
+    pub fn new() -> Self {
+        Self {
+            pc_gens: PedersenGens::default(),
+            bp_gens: BulletproofGens::new(2100, 1),
+            statement: Statement::new(curve::param_d()),
+        }
     }
 
-    fn gadget<CS: ConstraintSystem>(
-        cs: &mut CS,
-        f: Variable,
-        x: Variable,
-        y: Variable,
-    ) -> Result<(), R1CSError> {
-        // Baby's first Bulletproof: y = x^2
-        let (_, _, r) = cs.multiply(x.into(), x.into());
-        cs.constrain(r - y);
-        cs.constrain(r - f);
-        Ok(())
+    pub fn find_permissible(&self, xy: PointValue) -> (curve::Fp, PointValue) {
+        self.statement.find_permissible_randomness(&mut OsRng, xy)
     }
 
-    pub fn to_bytes(self) -> Vec<u8> {
-        self.0.to_bytes()
-    }
-
-    pub fn from_bytes(slice: &[u8]) -> Result<Self, R1CSError> {
-        let proof = R1CSProof::from_bytes(slice)?;
-        Ok(Self(proof))
-    }
-
-    pub fn prove<'a, 'b>(
-        pc_gens: &'b PedersenGens,
-        bp_gens: &'b BulletproofGens,
-        transcript: &'a mut Transcript,
-        scalar_x: Scalar,
-        scalar_y: Scalar,
-        blind_x: Scalar,
-        blind_y: Scalar,
-    ) -> Result<
-        (
-            RandomizedOpening,
-            Vec<CompressedRistretto>, // input commitments
-            Vec<CompressedRistretto>, // output commitments
-        ),
-        R1CSError,
-    > {
-        transcript.commit_bytes(b"dom-sep", b"Rerandomization");
-
-        let mut prover = Prover::new(&pc_gens, transcript);
-
-        let f = prover.allocate(Some(Scalar::from(4u64))).unwrap();
-
-        let b = misc::Bit::new(&mut prover, true);
-
-        let (comm_x, var_x) = prover.commit(scalar_x, blind_y);
-        let (comm_y, var_y) = prover.commit(scalar_y, blind_y);
-
-        Self::gadget(&mut prover, f, var_x, var_y)?;
-
-        let proof = prover.prove(&bp_gens)?;
-
-        Ok((Self(proof), vec![comm_x, comm_y], vec![]))
-    }
-
-    /// Attempt to verify a `ShuffleProof`.
-    pub fn verify<'a, 'b>(
+    pub fn prove(
         &self,
-        pc_gens: &'b PedersenGens,
-        bp_gens: &'b BulletproofGens,
-        transcript: &'a mut Transcript,
-        comm_x: CompressedRistretto,
-        comm_y: CompressedRistretto,
-    ) -> Result<(), R1CSError> {
-        transcript.commit_bytes(b"dom-sep", b"Rerandomization");
+        comm_r: Scalar,
+        r: curve::Fp,
+        xy: PointValue,
+    ) -> (Proof, CompressedRistretto) {
+        let transcript = Transcript::new(b"Randomize");
+        let mut prover = Prover::new(&self.pc_gens, transcript);
 
+        let comm = self.statement.rerandomize.compute(r, xy);
+
+        let witness = self.statement.witness(comm, -r);
+
+        let (comm_x, input_x) = prover.commit(comm.x, comm_r);
+
+        self.statement
+            .gadget(&mut prover, Some(&witness), input_x, xy)
+            .unwrap();
+
+        (Proof(prover.prove(&self.bp_gens).unwrap()), comm_x)
+    }
+
+    pub fn verify(&self, proof: &Proof, comm: CompressedRistretto, xy: PointValue) -> bool {
+        let transcript = Transcript::new(b"Randomize");
         let mut verifier = Verifier::new(transcript);
 
-        let f = verifier.allocate(None).unwrap();
+        let comm_x = verifier.commit(comm);
 
-        let b = misc::Bit::free(&mut verifier);
+        self.statement
+            .gadget(&mut verifier, None, comm_x, xy)
+            .unwrap();
 
-        let var_x = verifier.commit(comm_x);
-        let var_y = verifier.commit(comm_y);
+        verifier
+            .verify(&proof.0, &self.pc_gens, &self.bp_gens)
+            .is_ok()
+    }
+}
 
-        Self::gadget(&mut verifier, f, var_x, var_y)?;
+mod tests {
+    use super::*;
 
-        verifier.verify(&self.0, &pc_gens, &bp_gens)
+    fn test_proof() {
+        let r = Rerandomization::new();
+
+        // let (proof, comm) = r.prove(Scalar::one(), )
     }
 }

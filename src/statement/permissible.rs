@@ -3,8 +3,6 @@ use curve25519_dalek::scalar::Scalar;
 
 use std::iter::FromIterator;
 
-use crate::misc::{one, Bit};
-
 use super::*;
 
 // x must be in a "small" range

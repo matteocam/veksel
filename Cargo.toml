@@ -11,6 +11,7 @@ gridiron = "0.8"
 merlin = "2.0.0"
 num-traits = "0.2.14"
 rand = "0.7.3"
+rand_core = {version = "0.5.1", features = ["getrandom"]}
 
 [dev-dependencies]
 proptest = "0.10.1"

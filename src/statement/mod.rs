@@ -1,4 +1,5 @@
-mod curve;
+pub mod curve;
+mod misc;
 mod permissible;
 mod window;
 
@@ -7,7 +8,8 @@ use rand::{Rng, RngCore};
 use bulletproofs::r1cs::*;
 use curve25519_dalek::scalar::Scalar;
 
-pub use curve::fp_inner::Fp256 as FpInner;
+use misc::*;
+
 pub use permissible::{Permissible, PermissibleWitness};
 pub use window::{FixScalarMult, FixScalarMultWitness};
 
@@ -38,8 +40,8 @@ fn test_identity() {
 }
 
 pub struct Statement {
-    rerandomize: FixScalarMult,
-    permissible: Permissible,
+    pub rerandomize: FixScalarMult,
+    pub permissible: Permissible,
 }
 
 pub struct StatementWitness {
@@ -71,12 +73,12 @@ impl Statement {
 
     pub fn witness(
         &self,
-        xy: PointValue, // commitment without randomness
-        r: curve::Fp,   // randomness for Pedersen commitment
+        comm: PointValue,
+        r: curve::Fp, // randomness for Pedersen commitment
     ) -> StatementWitness {
-        assert!(self.permissible.is_permissible(xy), "not a valid witness");
-        let permissible = self.permissible.witness(xy);
-        let rerandomize = self.rerandomize.witness(xy, r);
+        assert!(self.permissible.is_permissible(comm), "not a valid witness");
+        let permissible = self.permissible.witness(comm);
+        let rerandomize = self.rerandomize.witness(comm, r);
         StatementWitness {
             permissible,
             rerandomize,
@@ -192,7 +194,7 @@ mod tests {
     #[bench]
     fn verify_statement(b: &mut Bencher) {
         let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(3000, 1);
+        let bp_gens = BulletproofGens::new(2100, 1);
         let transcript = Transcript::new(b"Test");
         let mut prover = Prover::new(&pc_gens, transcript);
 
@@ -226,7 +228,7 @@ mod tests {
     #[test]
     fn test_statement() {
         let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(3000, 1);
+        let bp_gens = BulletproofGens::new(2100, 1);
         let transcript = Transcript::new(b"Test");
         let mut prover = Prover::new(&pc_gens, transcript);
 

@@ -3,7 +3,6 @@ use bulletproofs::r1cs::*;
 use curve25519_dalek::scalar::Scalar;
 
 use super::*;
-use crate::misc::{one, Bit};
 
 const WINDOW_SIZE: usize = 3;
 const WINDOW_ELEMS: usize = 1 << WINDOW_SIZE;
