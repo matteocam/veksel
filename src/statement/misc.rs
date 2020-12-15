@@ -1,6 +1,5 @@
 use bulletproofs::r1cs::*;
 use curve25519_dalek::scalar::Scalar;
-use std::ops::Mul;
 
 /// A variable which is constraint to be a bit-value
 /// (can be converted into a Variable, but not vise versa)

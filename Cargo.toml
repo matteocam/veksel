@@ -5,11 +5,13 @@ name = "veksel"
 version = "0.1.0"
 
 [dependencies]
-cpsnarks-set = { git = "https://github.com/matteocam/cpsnarks-set"   }
 bulletproofs = {git = "https://github.com/matteocam/bulletproofs", branch = "develop", features = ["yoloproofs"]}# R1CS interface
+cpsnarks-set = {git = "https://github.com/matteocam/cpsnarks-set"}
 curve25519-dalek = "3.0.0"
 gridiron = "0.8"
 merlin = "2.0.0"
+num-bigint = "0.2.6"
+num-primes = "0.1.1"
 num-traits = "0.2.14"
 rand = "0.7.3"
 rand_core = {version = "0.5.1", features = ["getrandom"]}

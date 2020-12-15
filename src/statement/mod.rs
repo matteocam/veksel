@@ -8,6 +8,8 @@ use rand::{Rng, RngCore};
 use bulletproofs::r1cs::*;
 use curve25519_dalek::scalar::Scalar;
 
+use num_traits::One;
+
 use misc::*;
 
 pub use permissible::{Permissible, PermissibleWitness};
@@ -62,12 +64,17 @@ impl Statement {
         rng: &mut R,
         xy: PointValue,
     ) -> (curve::Fp, PointValue) {
+        // pick initial randomness
+        let mut r = curve::Fp::random(rng); // commitment randomness
+        let mut comm = self.rerandomize.compute(r, xy); // randomized commitment
+
+        // count up randomness until the commitment is permissible
         loop {
-            let r = curve::Fp::random(rng); // commitment randomness
-            let comm = self.rerandomize.compute(r, xy); // randomized commitment
             if self.permissible.is_permissible(comm) {
                 break (r, comm);
             }
+            r = r + curve::Fp::one();
+            comm = curve_add(self.permissible.d, comm, curve::generator());
         }
     }
 
@@ -129,13 +136,6 @@ impl Point {
 }
 
 impl PointValue {
-    pub fn identity() -> Self {
-        Self {
-            x: Scalar::one(),
-            y: Scalar::zero(),
-        }
-    }
-
     pub fn check(&self, d: Scalar) -> bool {
         let x2 = self.x * self.x;
         let y2 = self.y * self.y;

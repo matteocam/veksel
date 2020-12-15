@@ -17,13 +17,13 @@ use rand_core::OsRng;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 
-struct Rerandomization {
+pub struct Rerandomization {
     bp_gens: BulletproofGens,
     pc_gens: PedersenGens,
     statement: Statement,
 }
 
-struct Proof(R1CSProof);
+pub struct Proof(R1CSProof);
 
 impl Rerandomization {
     pub fn new() -> Self {
@@ -76,6 +76,7 @@ impl Rerandomization {
     }
 }
 
+/*
 mod tests {
     use super::*;
 
@@ -85,3 +86,4 @@ mod tests {
         // let (proof, comm) = r.prove(Scalar::one(), )
     }
 }
+*/

@@ -1,6 +1,9 @@
 use bulletproofs::r1cs::*;
 use curve25519_dalek::scalar::Scalar;
 
+use num_bigint::BigUint;
+use num_primes::Verification;
+
 use std::iter::FromIterator;
 
 use super::*;
@@ -13,13 +16,19 @@ pub const SIZE_Y_BITS: usize = 253;
 
 pub struct Permissible {
     powers: Vec<Scalar>,
-    d: Scalar,
+    pub d: Scalar,
 }
 
 pub struct PermissibleWitness {
     x_bits: Vec<bool>,
     y_bits: Vec<bool>,
     point: PointValue,
+}
+
+fn is_prime(x: &Scalar) -> bool {
+    let p = BigUint::from_bytes_le(x.as_bytes());
+    println!("{:?}", p);
+    Verification::is_prime(&p)
 }
 
 impl Permissible {
@@ -38,12 +47,10 @@ impl Permissible {
         let x_bytes = p.x.as_bytes();
         let y_bytes = p.y.as_bytes();
 
-        // todo: check if prime
-
         // (x, y) is a point on the curve
         // x[31] \in {0, 1} -> x \in [0, 2^250]
         // y mod 2 == 0
-        p.check(self.d) && (x_bytes[31] < 4) && (y_bytes[0] & 1 == 0)
+        p.check(self.d) && (x_bytes[31] < 4) && (y_bytes[0] & 1 == 0) & is_prime(&p.x)
     }
 
     pub fn witness(&self, point: PointValue) -> PermissibleWitness {
@@ -147,29 +154,5 @@ impl Permissible {
         let (_, _, xxyy) = cs.multiply(xx.into(), yy.into());
         cs.constrain((xx + yy) - one() - self.d * xxyy);
         Ok(Point { x: x_1, y: y_1 })
-    }
-}
-
-mod tests {
-    use super::*;
-
-    use bulletproofs::r1cs::ConstraintSystem;
-    use bulletproofs::{BulletproofGens, PedersenGens};
-    use curve25519_dalek::ristretto::CompressedRistretto;
-    use curve25519_dalek::scalar::Scalar;
-    use merlin::Transcript;
-
-    use rand::thread_rng;
-    use rand::Rng;
-
-    #[test]
-    fn test_permissible() {
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(2100, 1);
-        let transcript = Transcript::new(b"Test");
-        let mut prover = Prover::new(&pc_gens, transcript);
-
-        let transcript = Transcript::new(b"Test");
-        let mut verifier = Verifier::new(transcript);
     }
 }
