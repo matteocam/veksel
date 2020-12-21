@@ -1,8 +1,7 @@
 use bulletproofs::r1cs::*;
 use curve25519_dalek::scalar::Scalar;
 
-use num_bigint::BigUint;
-use num_primes::Verification;
+use rug::{integer, Integer};
 
 use std::iter::FromIterator;
 
@@ -26,9 +25,8 @@ pub struct PermissibleWitness {
 }
 
 fn is_prime(x: &Scalar) -> bool {
-    let p = BigUint::from_bytes_le(x.as_bytes());
-    println!("{:?}", p);
-    Verification::is_prime(&p)
+    let p = Integer::from_digits(x.as_bytes(), integer::Order::Lsf);
+    p.is_probably_prime(64) != integer::IsPrime::No
 }
 
 impl Permissible {

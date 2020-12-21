@@ -21,7 +21,6 @@ pub struct WindowWitness {
 }
 
 pub struct FixScalarMultWitness {
-    input: PointValue,
     window_witness: Vec<WindowWitness>,
 }
 
@@ -83,10 +82,7 @@ impl FixScalarMult {
             window_witness.push(w);
         }
 
-        FixScalarMultWitness {
-            input,
-            window_witness,
-        }
+        FixScalarMultWitness { window_witness }
     }
 
     pub fn gadget<CS: ConstraintSystem>(

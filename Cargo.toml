@@ -12,11 +12,8 @@ accumulator = { git = "https://github.com/matteocam/cpsnarks-set-accumulator" }
 curve25519-dalek = "3.0.0"
 rug = "=1.7.0"
 ark-bls12-381 = { git = "https://github.com/arkworks-rs/curves", default-features = false, features = [ "curve" ] }
-
 gridiron = "0.8"
 merlin = "2.0.0"
-num-bigint = "0.2.6"
-num-primes = "0.1.1"
 num-traits = "0.2.14"
 rand = "0.7.3"
 rand_core = {version = "0.5.1", features = ["getrandom"]}
