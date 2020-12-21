@@ -6,8 +6,13 @@ version = "0.1.0"
 
 [dependencies]
 bulletproofs = {git = "https://github.com/matteocam/bulletproofs", branch = "develop", features = ["yoloproofs"]}# R1CS interface
-cpsnarks-set = {git = "https://github.com/matteocam/cpsnarks-set"}
+cpsnarks-set = {git = "https://github.com/matteocam/cpsnarks-set", default-features = false, features = [ "dalek" ] }
+accumulator = { git = "https://github.com/matteocam/cpsnarks-set-accumulator" }
+
 curve25519-dalek = "3.0.0"
+rug = "=1.7.0"
+ark-bls12-381 = { git = "https://github.com/arkworks-rs/curves", default-features = false, features = [ "curve" ] }
+
 gridiron = "0.8"
 merlin = "2.0.0"
 num-bigint = "0.2.6"
