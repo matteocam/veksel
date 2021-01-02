@@ -48,6 +48,7 @@ impl Permissible {
         // (x, y) is a point on the curve
         // x[31] \in {0, 1} -> x \in [0, 2^250]
         // y mod 2 == 0
+        // x is prime
         p.check(self.d) && (x_bytes[31] < 4) && (y_bytes[0] & 1 == 0) & is_prime(&p.x)
     }
 
