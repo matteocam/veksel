@@ -17,8 +17,10 @@ use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar};
 
 use cpsnarks_set::commitments::Commitment;
 use cpsnarks_set::parameters::Parameters;
+
+// export some types as "Gen"-erics; specialized later
 use cpsnarks_set::protocols::membership_simple::Proof as SetMemProofGen;
-use cpsnarks_set::protocols::membership_simple::Protocol;
+use cpsnarks_set::protocols::membership_simple::Protocol as ProtocolGen;
 use cpsnarks_set::protocols::membership_simple::Statement as SetMemStatementGen;
 use cpsnarks_set::protocols::membership_simple::Witness as SetMemWitnessGen;
 
@@ -32,20 +34,24 @@ use std::cell::RefCell;
 use rug::rand::{MutRandState, RandState};
 use rug::Integer;
 
-type SetMemStatement = SetMemStatementGen<Rsa2048, RistrettoPoint>;
-type SetMemWitness = SetMemWitnessGen<Rsa2048>;
-type SetMemProof = SetMemProofGen<Rsa2048, RistrettoPoint>;
+
+// TODO: (at some point) Abstract curves we are using through generics
+pub type SetMemStatement = SetMemStatementGen<Rsa2048, RistrettoPoint>;
+pub type SetMemWitness = SetMemWitnessGen<Rsa2048>;
+pub type SetMemProof = SetMemProofGen<Rsa2048, RistrettoPoint>;
+pub type SetMemProtocol = ProtocolGen<Rsa2048, RistrettoPoint>;
+pub type Accumulator = accumulator::Accumulator::<Rsa2048, Integer, AccumulatorWithoutHashToPrime>;
+
 
 // NEXT: Add specific generics to SetMemStatement,etc.
 
-// TODO: (at some point) Abstract curves we are using through generics
 
 /*
     NB: This implementation carries out set membership assuming a range test
         has been done somewhere else
 */
 pub struct SetMembership<R1: MutRandState, R2: RngCore + CryptoRng> {
-    protocol: Protocol<Rsa2048, RistrettoPoint>, // contains crs
+    protocol: SetMemProtocol, // contains crs
 
     rng1: R1,
     rng2: R2,
@@ -60,12 +66,12 @@ impl SetMembership<RandState<'_>, ThreadRng> {
         rng1.seed(&Integer::from(13));
         let mut rng2 = thread_rng();
 
-        let crs = Protocol::<Rsa2048, RistrettoPoint>::setup(&params, &mut rng1, &mut rng2)
+        let crs = SetMemProtocol::setup(&params, &mut rng1, &mut rng2)
             .unwrap()
             .crs;
 
         SetMembership {
-            protocol: Protocol::<Rsa2048, RistrettoPoint>::from_crs(&crs),
+            protocol: SetMemProtocol::from_crs(&crs),
             rng1,
             rng2,
         }
@@ -95,8 +101,7 @@ impl<R1: MutRandState, R2: RngCore + CryptoRng> SetMembership<R1, R2> {
             8_640_171_141_336_142_787,
         ];
 
-        let accum =
-            accumulator::Accumulator::<Rsa2048, Integer, AccumulatorWithoutHashToPrime>::empty();
+        let accum = Accumulator::empty();
         let accum = accum.add(
             &LARGE_PRIMES
                 .iter()
@@ -163,7 +168,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_set_mem_proof() {
+    fn membership_proof() {
         let mut setmem = SetMembership::<RandState<'_>, ThreadRng>::new();
         let (statement, witness) = setmem.random_xw();
         let prf = setmem.prove(&statement, &witness);
