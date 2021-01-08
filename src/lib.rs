@@ -7,15 +7,20 @@ mod randomize;
 
 use serde::{Deserialize, Serialize};
 
-use crate::membership::Accumulator;
+use crate::membership::{Accumulator, ElemCommitment, ElemCommRandomness, SetMemProof};
+
+
+pub type OuterCommitment = ElemCommitment;
+pub type OuterCommRandomness = ElemCommRandomness;
+
 
 /// Joins a membership proof and a re-randomization proof
 ///
 /// Implements Serde::Serialize for serialization.
-#[derive(Deserialize, Serialize)]
+// #[derive(Deserialize, Serialize)] // XXX: Temporarily removed: SetMemProof does not have a serializable implementation yet
 struct Proof {
-    outer_comm: (),              // outer commitment (Risetto25519 point)
-    membership: (),              // proof of membership for outer commitment
+    outer_comm: OuterCommitment,              // outer commitment (Risetto25519 point)
+    membership: SetMemProof,              // proof of membership for outer commitment
     randomize: randomize::Proof, //
 }
 
@@ -26,7 +31,7 @@ struct Statement<'a> {
 
 struct Witness {
     inner_r: (), // inner randomness
-    outer_r: (), // outer randomness
+    outer_r: OuterCommRandomness, // outer randomness
 }
 
 #[cfg(test)]
@@ -38,12 +43,14 @@ mod tests {
     use rug::rand::{MutRandState, RandState};
     use rug::Integer;
 
+    use super::membership::tests::*;
 
     #[test]
-    fn test_set_mem_proof() {
+      fn tst() {
         let mut setmem = SetMembership::<RandState<'_>, ThreadRng>::new();
-        let (statement, witness) = setmem.random_xw();
+        let (statement, witness) = random_xw(&mut setmem);
         let prf = setmem.prove(&statement, &witness);
         assert!(setmem.verify(&statement, &prf));
     }
+
 }

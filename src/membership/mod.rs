@@ -15,7 +15,7 @@ use rand::rngs::*;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar};
 
-use cpsnarks_set::commitments::Commitment;
+use cpsnarks_set::commitments::{Commitment,pedersen::PedersenCommitment};
 use cpsnarks_set::parameters::Parameters;
 
 // export some types as "Gen"-erics; specialized later
@@ -41,6 +41,9 @@ pub type SetMemWitness = SetMemWitnessGen<Rsa2048>;
 pub type SetMemProof = SetMemProofGen<Rsa2048, RistrettoPoint>;
 pub type SetMemProtocol = ProtocolGen<Rsa2048, RistrettoPoint>;
 pub type Accumulator = accumulator::Accumulator::<Rsa2048, Integer, AccumulatorWithoutHashToPrime>;
+
+pub type ElemCommitment = <PedersenCommitment<RistrettoPoint> as Commitment>::Instance;
+pub type ElemCommRandomness = Integer;
 
 
 // NEXT: Add specific generics to SetMemStatement,etc.
@@ -79,14 +82,57 @@ impl SetMembership<RandState<'_>, ThreadRng> {
 }
 
 impl<R1: MutRandState, R2: RngCore + CryptoRng> SetMembership<R1, R2> {
+    
+
+    pub fn prove(
+        &mut self, // mut is required for rng-s
+        statement: &SetMemStatement,
+        witness: &SetMemWitness,
+    ) -> SetMemProof {
+        let proof_transcript = RefCell::new(Transcript::new(b"membership"));
+        let mut verifier_channel =
+            TranscriptVerifierChannel::new(&self.protocol.crs, &proof_transcript);
+
+        self.protocol
+            .prove(
+                &mut verifier_channel,
+                &mut self.rng1,
+                &mut self.rng2,
+                statement,
+                witness,
+            )
+            .unwrap();
+        let proof = verifier_channel.proof().unwrap();
+        proof
+    }
+
+    pub fn verify(&self, statement: &SetMemStatement, proof: &SetMemProof) -> bool {
+        let verification_transcript = RefCell::new(Transcript::new(b"membership"));
+        let mut prover_channel =
+            TranscriptProverChannel::new(&self.protocol.crs, &verification_transcript, proof);
+        self.protocol
+            .verify(&mut prover_channel, &statement)
+            .unwrap();
+
+        // unwrap above fails if something goes wrong
+        true
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
     // Generate some (statement, witness) pair
-    pub fn random_xw(&mut self) -> (SetMemStatement, SetMemWitness) {
+    pub fn random_xw<R1: MutRandState, R2: RngCore + CryptoRng>
+        (setmem:&mut SetMembership<R1, R2>) -> (SetMemStatement, SetMemWitness)
+    {
         let value = Integer::from(Integer::u_pow_u(
             2,
-            (self.protocol.crs.parameters.hash_to_prime_bits) as u32,
+            (setmem.protocol.crs.parameters.hash_to_prime_bits) as u32,
         )) - &Integer::from(245);
         let randomness = Integer::from(5);
-        let commitment = self
+        let commitment = setmem
             .protocol
             .crs
             .crs_modeq
@@ -128,49 +174,10 @@ impl<R1: MutRandState, R2: RngCore + CryptoRng> SetMembership<R1, R2> {
         (statement, witness)
     }
 
-    pub fn prove(
-        &mut self, // mut is required for rng-s
-        statement: &SetMemStatement,
-        witness: &SetMemWitness,
-    ) -> SetMemProof {
-        let proof_transcript = RefCell::new(Transcript::new(b"membership"));
-        let mut verifier_channel =
-            TranscriptVerifierChannel::new(&self.protocol.crs, &proof_transcript);
-
-        self.protocol
-            .prove(
-                &mut verifier_channel,
-                &mut self.rng1,
-                &mut self.rng2,
-                statement,
-                witness,
-            )
-            .unwrap();
-        let proof = verifier_channel.proof().unwrap();
-        proof
-    }
-
-    pub fn verify(&self, statement: &SetMemStatement, proof: &SetMemProof) -> bool {
-        let verification_transcript = RefCell::new(Transcript::new(b"membership"));
-        let mut prover_channel =
-            TranscriptProverChannel::new(&self.protocol.crs, &verification_transcript, proof);
-        self.protocol
-            .verify(&mut prover_channel, &statement)
-            .unwrap();
-
-        // unwrap above fails if something goes wrong
-        true
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
     #[test]
     fn membership_proof() {
         let mut setmem = SetMembership::<RandState<'_>, ThreadRng>::new();
-        let (statement, witness) = setmem.random_xw();
+        let (statement, witness) = random_xw(&mut setmem);
         let prf = setmem.prove(&statement, &witness);
         assert!(setmem.verify(&statement, &prf));
     }
