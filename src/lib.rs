@@ -119,16 +119,6 @@ impl<'a> Veksel<'a> {
             "coin is not permissible, the proof will not be valid"
         );
 
-        // randomness to "add" to inner commitment
-        let inner_delta_random = InnerCommRandomness::random(&mut OsRng);
-
-        // compute resulting commitment
-        // inner_comm = coin * g^inner_delta_random
-        //            = h_1^v_1 * ... * h_b^v_n * g^(old_random + inner_delta_random)
-        let inner_comm = self
-            .rerand
-            .rerandomize_comm(inner_delta_random.clone(), coin.clone());
-
         // XXX: This produces something with different params than BP
         // commit to the coin in the RSA group
         let coin_as_acc_elem = Integer::from(coin.clone());
@@ -139,11 +129,14 @@ impl<'a> Veksel<'a> {
         // commit to the coin in the Risetto25519 group
         let outer_r_risetto = Scalar::random(&mut OsRng); // randomness for the field commitment (in the group of known order)
 
+        // randomness to "add" to inner commitment
+        let inner_delta_random = InnerCommRandomness::random(&mut OsRng);
+
         // prove re-randomization
         let (rerandomize_proof, rerandomized_coin, outer_comm_risetto) = self.rerand.prove(
             outer_r_risetto,            // outer commitment randomness
             inner_delta_random.clone(), // randomness to "add"
-            coin.clone(),               // coin inside outer commitment
+            coin.clone(),               // coin inside outer commitment (original coin)
         );
 
         // prove set membership
@@ -180,7 +173,7 @@ impl<'a> Veksel<'a> {
             modeq_proof: (),
         };
 
-        (inner_comm, proof)
+        (rerandomized_coin, proof)
     }
     pub fn verify_spent_coin(&self, coins: &Coins, rerand_coin: Coin, prf: &Proof) -> bool {
         let setmem_x = SetMemStatement {
