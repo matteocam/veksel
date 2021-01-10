@@ -15,6 +15,10 @@ use misc::*;
 pub use permissible::{Permissible, PermissibleWitness};
 pub use window::{FixScalarMult, FixScalarMultWitness};
 
+use rug::Integer;
+
+use hex;
+
 impl curve::Fp {
     pub fn random<R: RngCore>(rng: &mut R) -> Self {
         let limbs: [u8; 32] = rng.gen();
@@ -132,6 +136,19 @@ impl Point {
         let x = cs.allocate(None)?;
         let y = cs.allocate(None)?;
         Ok(Point { x, y })
+    }
+}
+
+impl From<PointValue> for Integer {
+    // convert the coefficient x to Integer
+    fn from(item: PointValue) -> Integer {
+        // rug::Integer seems to support only hex, so we first convert intp that
+
+        let mut bytes: [u8; 32] = item.x.to_bytes();
+        bytes.reverse(); // to big endian before convert to hex str
+        
+        let str_repr = hex::encode(bytes);
+        Integer::from_str_radix(&str_repr, 16).unwrap()
     }
 }
 

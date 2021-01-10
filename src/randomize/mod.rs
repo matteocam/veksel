@@ -17,6 +17,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Proof(R1CSProof);
 
+pub type InnerCommRandomness = curve::Fp;
+pub type InnerCommitment = PointValue;
+
 pub struct Rerandomization {
     bp_gens: BulletproofGens,
     pc_gens: PedersenGens,
@@ -53,6 +56,10 @@ impl Rerandomization {
             .find_permissible_randomness(&mut OsRng, inner_open)
     }
 
+    pub fn rerandomize_comm(&self, inner_r:curve::Fp, inner_open:PointValue) -> PointValue {
+        self.statement.rerandomize.compute(inner_r, inner_open)
+    }
+
     /// Prove that a commitment over Risetto25519, contains a commitment (over Jabberwock)
     /// which opens to a particular value, without revealing any commitment randomness.
     ///
@@ -77,13 +84,13 @@ impl Rerandomization {
     pub fn prove(
         &self,
         outer_r: Scalar,        // witness (outer commitment randomness)
-        inner_r: curve::Fp,     // witness (inner commitment randomness)
+        inner_r: InnerCommRandomness,     // witness (inner commitment randomness)
         inner_open: PointValue, // statement
     ) -> (Proof, CompressedRistretto) {
         let transcript = Transcript::new(b"Randomize");
         let mut prover = Prover::new(&self.pc_gens, transcript);
 
-        let comm = self.statement.rerandomize.compute(inner_r, inner_open);
+        let comm = self.rerandomize_comm(inner_r, inner_open);
 
         let witness = self.statement.witness(comm, -inner_r);
 

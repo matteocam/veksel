@@ -1,5 +1,3 @@
-#![feature(test)]
-
 extern crate test;
 
 use merlin::Transcript;
@@ -24,10 +22,14 @@ use cpsnarks_set::protocols::membership_simple::Protocol as ProtocolGen;
 use cpsnarks_set::protocols::membership_simple::Statement as SetMemStatementGen;
 use cpsnarks_set::protocols::membership_simple::Witness as SetMemWitnessGen;
 
+use cpsnarks_set::utils::ConvertibleUnknownOrderGroup;
+
 use cpsnarks_set::protocols::membership_simple::transcript::*;
 
 use accumulator::group::Rsa2048;
 use accumulator::{group::Group, AccumulatorWithoutHashToPrime};
+
+
 
 use std::cell::RefCell;
 
@@ -41,6 +43,8 @@ pub type SetMemWitness = SetMemWitnessGen<Rsa2048>;
 pub type SetMemProof = SetMemProofGen<Rsa2048, RistrettoPoint>;
 pub type SetMemProtocol = ProtocolGen<Rsa2048, RistrettoPoint>;
 pub type Accumulator = accumulator::Accumulator::<Rsa2048, Integer, AccumulatorWithoutHashToPrime>;
+
+pub type AccumulatorWitness = <Rsa2048 as Group> ::Elem;
 
 pub type ElemCommitment = <PedersenCommitment<RistrettoPoint> as Commitment>::Instance;
 pub type ElemCommRandomness = Integer;
@@ -82,6 +86,15 @@ impl SetMembership<RandState<'_>, ThreadRng> {
 }
 
 impl<R1: MutRandState, R2: RngCore + CryptoRng> SetMembership<R1, R2> {
+
+    pub fn commit_to_set_element(&self, value: &Integer, randomness: &ElemCommRandomness) -> ElemCommitment {
+        self.protocol
+            .crs
+            .crs_modeq
+            .pedersen_commitment_parameters
+            .commit(value,randomness)
+            .unwrap()
+    }
     
 
     pub fn prove(
@@ -132,13 +145,7 @@ pub mod tests {
             (setmem.protocol.crs.parameters.hash_to_prime_bits) as u32,
         )) - &Integer::from(245);
         let randomness = Integer::from(5);
-        let commitment = setmem
-            .protocol
-            .crs
-            .crs_modeq
-            .pedersen_commitment_parameters
-            .commit(&value, &randomness)
-            .unwrap();
+        let commitment = setmem.commit_to_set_element(&value, &randomness);
 
         const LARGE_PRIMES: [u64; 4] = [
             553_525_575_239_331_913,

@@ -5,14 +5,30 @@ extern crate test;
 mod membership;
 mod randomize;
 
+use rand::{thread_rng, CryptoRng, RngCore, Rng};
+use rand::rngs::*;
+
+
 use serde::{Deserialize, Serialize};
 
-use crate::membership::{Accumulator, ElemCommitment, ElemCommRandomness, SetMemProof};
+use std::cell::RefCell;
 
+use crate::membership::{SetMemStatement, SetMemWitness, SetMembership,Accumulator, ElemCommitment, ElemCommRandomness, SetMemProof, AccumulatorWitness};
+use randomize::{Rerandomization, InnerCommRandomness, InnerCommitment};
+
+use curve25519_dalek::scalar::Scalar;
+
+use rug::rand::{MutRandState, RandState};
+use rug::Integer;
 
 pub type OuterCommitment = ElemCommitment;
 pub type OuterCommRandomness = ElemCommRandomness;
 
+//pub type InnerCommitment = rug::Integer; // XXX
+
+pub type Coin = InnerCommitment;
+
+use bulletproofs::{BulletproofGens, PedersenGens};
 
 /// Joins a membership proof and a re-randomization proof
 ///
@@ -30,9 +46,98 @@ struct Statement<'a> {
 }
 
 struct Witness {
-    inner_r: (), // inner randomness
+    inner_r: InnerCommRandomness, // inner randomness
     outer_r: OuterCommRandomness, // outer randomness
 }
+
+
+struct Coins {
+    accum: Accumulator,
+}
+
+impl Coins {
+    pub fn new() -> Self {
+        Self {
+            accum: Accumulator::empty(),
+        }
+    }
+    pub fn add_coin_with_proof(self, coin: &Coin) -> (Self, AccumulatorWitness) {
+        let (new_acc, prf) = 
+            self.accum.add_with_proof (&[ Integer::from(coin.clone()) ] );
+        (
+            Self { accum: new_acc }, // new acc
+            prf.witness.0.value // witness
+        )
+    }
+
+   
+}
+
+
+// Public parameters
+struct Veksel<'a> {
+    rerand: Rerandomization,
+    setmem: RefCell<SetMembership<RandState<'a>, ThreadRng>>
+}
+
+
+fn integer_to_scalar(item: Integer) -> Scalar {
+    // XXX: u64 is only for simplicity here
+    Scalar::from(item.to_u64().unwrap())
+}
+
+
+impl<'a> Veksel<'a> {
+    pub fn new() -> Self {
+        Self { 
+            rerand: Rerandomization::new(),
+            setmem: RefCell::new(SetMembership::<RandState<'a>, ThreadRng>::new() ), // XXX: Should be made generic
+        }
+    }
+
+
+     // Returns rerandomized coin + a related proof
+     pub fn spend_coin<R: RngCore>(&self, mut rng: R, coins: &Coins, coin: &Coin, coin_w: &AccumulatorWitness, ) -> (Coin, Proof) {
+        // make inner commitment
+        let blinding = InnerCommRandomness::random(&mut rng);
+        let inner_comm = self.rerand.rerandomize_comm(blinding.clone(), coin.clone());
+
+        // make outer commitment
+        let coin_as_acc_elem = Integer::from(coin.clone());
+        let outer_r = Integer::from(5); // XXX: fixed randomness
+
+        let outer_comm = (self.setmem.borrow_mut()).
+            commit_to_set_element(&coin_as_acc_elem, &outer_r);
+        
+        // prove set membership 
+        let setmem_x = SetMemStatement {
+            c_e_q: outer_comm.clone(),
+            c_p: coins.accum.value.clone(),
+        };
+
+        let setmem_w = SetMemWitness {
+            e: coin_as_acc_elem.clone(),
+            r_q: outer_r.clone(),
+            w: coin_w.clone(),
+        };
+
+        let setmem_prf = (self.setmem.borrow_mut()).prove(&setmem_x, &setmem_w);
+
+
+        // prove rereandomization
+        let rerand_prf = self.rerand.prove(integer_to_scalar(outer_r), blinding.clone(), coin.clone()).0;
+
+        let proof =  Proof {
+            outer_comm: outer_comm,              // outer commitment (Risetto25519 point)
+            membership: setmem_prf,              // proof of membership for outer commitment
+            randomize: rerand_prf, //
+        };
+
+        (inner_comm, proof)
+    }
+    
+}
+
 
 #[cfg(test)]
 mod tests {
