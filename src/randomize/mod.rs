@@ -101,22 +101,32 @@ impl Rerandomization {
         &self,
         outer_r: Scalar,              // witness (outer commitment randomness)
         inner_r: InnerCommRandomness, // witness (inner commitment randomness)
-        inner_open: PointValue,       // statement (input point to the)
-    ) -> (Proof, CompressedRistretto) {
+        inner_input: PointValue,      // input point
+    ) -> (Proof, PointValue, CompressedRistretto) {
+        // input point must be permissible
+        debug_assert!(self.is_permissible(inner_input));
+
+        // re-randomized output.
+        // output point need not be permissible
+        let inner_output = self.rerandomize_comm(inner_r, inner_input);
+
         let transcript = Transcript::new(b"Randomize");
         let mut prover = Prover::new(&self.pc_gens, transcript);
 
-        let comm = self.rerandomize_comm(inner_r, inner_open);
+        // the witness is the input to the re-randomization and the inner_r randomization scalar
+        let witness = self.statement.witness(inner_input, inner_r);
 
-        let witness = self.statement.witness(comm, inner_r);
-
-        let (comm_x, input_x) = prover.commit(comm.x, outer_r);
-
+        // statement defined by the re-randomized output (a constant in the circuit)
+        let (outer_comm, input_x) = prover.commit(inner_input.x, outer_r);
         self.statement
-            .gadget(&mut prover, Some(&witness), input_x, inner_open)
+            .gadget(&mut prover, Some(&witness), input_x, inner_output)
             .unwrap();
 
-        (Proof(prover.prove(&self.bp_gens).unwrap()), comm_x)
+        (
+            Proof(prover.prove(&self.bp_gens).unwrap()),
+            inner_output,
+            outer_comm,
+        )
     }
 
     /// Verify a previously produced proof

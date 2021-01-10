@@ -140,7 +140,7 @@ impl<'a> Veksel<'a> {
         let outer_r_risetto = Scalar::random(&mut OsRng); // randomness for the field commitment (in the group of known order)
 
         // prove re-randomization
-        let (rerandomize_proof, outer_comm_risetto) = self.rerand.prove(
+        let (rerandomize_proof, rerandomized_coin, outer_comm_risetto) = self.rerand.prove(
             outer_r_risetto,            // outer commitment randomness
             inner_delta_random.clone(), // randomness to "add"
             coin.clone(),               // coin inside outer commitment
@@ -177,7 +177,7 @@ impl<'a> Veksel<'a> {
             outer_comm_risetto,
             setmembership_proof,
             rerandomize_proof,
-            modeq_proof,
+            modeq_proof: (),
         };
 
         (inner_comm, proof)
