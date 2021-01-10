@@ -3,6 +3,8 @@ mod misc;
 mod permissible;
 mod window;
 
+use std::convert::TryFrom;
+
 use rand::{Rng, RngCore};
 
 use bulletproofs::r1cs::*;
@@ -15,9 +17,7 @@ use misc::*;
 pub use permissible::{Permissible, PermissibleWitness};
 pub use window::{FixScalarMult, FixScalarMultWitness};
 
-use rug::Integer;
-
-use hex;
+use rug::{integer, Integer};
 
 impl curve::Fp {
     pub fn random<R: RngCore>(rng: &mut R) -> Self {
@@ -141,14 +141,41 @@ impl Point {
 
 impl From<PointValue> for Integer {
     // convert the coefficient x to Integer
-    fn from(item: PointValue) -> Integer {
-        // rug::Integer seems to support only hex, so we first convert intp that
+    fn from(point: PointValue) -> Integer {
+        debug_assert!(
+            Permissible::new(curve::param_d()).is_permissible(point),
+            "converting a non-permissible point to an integer is undefined"
+        );
+        Integer::from_digits(point.x.as_bytes(), integer::Order::Lsf)
+    }
+}
 
-        let mut bytes: [u8; 32] = item.x.to_bytes();
-        bytes.reverse(); // to big endian before convert to hex str
-        
-        let str_repr = hex::encode(bytes);
-        Integer::from_str_radix(&str_repr, 16).unwrap()
+impl From<Integer> for PointValue {
+    fn from(value: Integer) -> Self {
+        /*
+        let mut x_bytes: [u8; 32] = [0u8; 32];
+        value.write_digits(&mut x_bytes[..], integer::Order::Lsf);
+        let x = Scalar::from_canonical_bytes(x_bytes).unwrap();
+        let x2 = x * x;
+        // x^2 + y^2 = 1 - d * x^2 * y^2
+        // y^2 = (1 - x^2) / (1 + d x^2)
+
+        let num = Scalar::one() - x2;
+        let denum = Scalar::one() + curve::param_d() * x2;
+        assert_eq!(denum, Scalar::zero(), "no solution");
+
+        let y2 = num * denum.invert();
+        debug_assert!(
+            Permissible::new(curve::param_d()).is_permissible(item),
+            "converting a non-permissible point to an integer is undefined"
+        );
+
+
+        x2 + y2 = 1 − d ·x2·y2
+        PointValue { x }
+        */
+
+        unimplemented!()
     }
 }
 

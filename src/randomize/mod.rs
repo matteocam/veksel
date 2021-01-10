@@ -9,7 +9,7 @@ use statement::{curve, PointValue, Statement};
 
 use rand_core::OsRng;
 
-use curve25519_dalek::ristretto::CompressedRistretto;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 
 use serde::{Deserialize, Serialize};
@@ -20,8 +20,7 @@ pub struct Proof(R1CSProof);
 pub type InnerCommRandomness = curve::Fp;
 pub type InnerCommitment = PointValue;
 
-pub fn dummy_comm() -> PointValue
-{
+pub fn dummy_comm() -> PointValue {
     curve::identity()
 }
 
@@ -38,6 +37,14 @@ impl Rerandomization {
             bp_gens: BulletproofGens::new(2100, 1),
             statement: Statement::new(curve::param_d()),
         }
+    }
+
+    pub fn commit(&self, value: Scalar, blinding: Scalar) -> RistrettoPoint {
+        self.pc_gens.commit(value, blinding)
+    }
+
+    pub fn is_permissible(&self, point: PointValue) -> bool {
+        self.statement.permissible.is_permissible(point)
     }
 
     /// Finds a randomness which makes the commitment `inner_open` "permissible".
@@ -61,7 +68,11 @@ impl Rerandomization {
             .find_permissible_randomness(&mut OsRng, inner_open)
     }
 
-    pub fn rerandomize_comm(&self, inner_r:InnerCommRandomness, inner_open:PointValue) -> PointValue {
+    pub fn rerandomize_comm(
+        &self,
+        inner_r: InnerCommRandomness,
+        inner_open: PointValue,
+    ) -> PointValue {
         self.statement.rerandomize.compute(inner_r, inner_open)
     }
 
@@ -88,20 +99,16 @@ impl Rerandomization {
     /// * The outer commitment `comm`
     pub fn prove(
         &self,
-        outer_r: Scalar,        // witness (outer commitment randomness)
-        inner_r: InnerCommRandomness,     // witness (inner commitment randomness)
-        inner_open: PointValue, // statement
+        outer_r: Scalar,              // witness (outer commitment randomness)
+        inner_r: InnerCommRandomness, // witness (inner commitment randomness)
+        inner_open: PointValue,       // statement (input point to the)
     ) -> (Proof, CompressedRistretto) {
-        use std::{println as info, println as warn};
-
         let transcript = Transcript::new(b"Randomize");
         let mut prover = Prover::new(&self.pc_gens, transcript);
 
         let comm = self.rerandomize_comm(inner_r, inner_open);
-        println!("{:?} {:?}", inner_r, inner_open);
 
-
-        let witness = self.statement.witness(comm, -inner_r);
+        let witness = self.statement.witness(comm, inner_r);
 
         let (comm_x, input_x) = prover.commit(comm.x, outer_r);
 
