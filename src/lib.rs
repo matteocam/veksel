@@ -7,6 +7,7 @@ mod randomize;
 
 use rand::{thread_rng, CryptoRng, RngCore, Rng};
 use rand::rngs::*;
+use rand_core::OsRng;
 
 
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 
 use crate::membership::{SetMemStatement, SetMemWitness, SetMembership,Accumulator, ElemCommitment, ElemCommRandomness, SetMemProof, AccumulatorWitness};
-use randomize::{Rerandomization, InnerCommRandomness, InnerCommitment};
+use randomize::{Rerandomization, InnerCommRandomness, InnerCommitment, dummy_comm};
 
 use curve25519_dalek::scalar::Scalar;
 
@@ -95,17 +96,24 @@ impl<'a> Veksel<'a> {
         }
     }
 
+    // XXX: Should be changed to proper "make_coin" with a target at some point
+    pub fn make_dummy_coin(&self) -> (InnerCommRandomness, Coin) {
+        let coin_tgt = dummy_comm();
+        self.rerand.find_permissible(coin_tgt)
+    }
+
 
      // Returns rerandomized coin + a related proof
-     pub fn spend_coin<R: RngCore>(&self, mut rng: R, coins: &Coins, coin: &Coin, coin_w: &AccumulatorWitness, ) -> (Coin, Proof) {
+    pub fn spend_coin(&self, coins: &Coins, coin: &Coin, coin_w: &AccumulatorWitness, ) -> (Coin, Proof) {
         // make inner commitment
-        let blinding = InnerCommRandomness::random(&mut rng);
+        let blinding = InnerCommRandomness::random(&mut OsRng);
         let inner_comm = self.rerand.rerandomize_comm(blinding.clone(), coin.clone());
 
         // make outer commitment
         let coin_as_acc_elem = Integer::from(coin.clone());
         let outer_r = Integer::from(5); // XXX: fixed randomness
 
+        // XXX: This produces something with different params than BP
         let outer_comm = (self.setmem.borrow_mut()).
             commit_to_set_element(&coin_as_acc_elem, &outer_r);
         
@@ -125,7 +133,7 @@ impl<'a> Veksel<'a> {
 
 
         // prove rereandomization
-        let rerand_prf = self.rerand.prove(integer_to_scalar(outer_r), blinding.clone(), coin.clone()).0;
+        let rerand_prf = self.rerand.prove(integer_to_scalar(outer_r), blinding.clone(), inner_comm.clone()).0;
 
         let proof =  Proof {
             outer_comm: outer_comm,              // outer commitment (Risetto25519 point)
@@ -136,11 +144,18 @@ impl<'a> Veksel<'a> {
         (inner_comm, proof)
     }
     
+    pub fn verify_spent_coin(&self, coins: &Coins, rerand_coin: Coin, prf: &Proof) -> bool {
+        let setmem_x = SetMemStatement { c_e_q: prf.outer_comm.clone(), c_p: coins.accum.value.clone() };
+        let setmem_ok = (self.setmem.borrow()).verify( &setmem_x, &prf.membership);
+        let rerand_ok = self.rerand.verify(&prf.randomize, prf.outer_comm.compress(), rerand_coin);
+        setmem_ok && rerand_ok
+    }
 }
 
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use super::membership::*;
     use rand::{thread_rng, CryptoRng, RngCore};
     use rand::rngs::*;
@@ -149,13 +164,21 @@ mod tests {
     use rug::Integer;
 
     use super::membership::tests::*;
+    use std::{println as info, println as warn};
+
 
     #[test]
-      fn tst() {
-        let mut setmem = SetMembership::<RandState<'_>, ThreadRng>::new();
-        let (statement, witness) = random_xw(&mut setmem);
-        let prf = setmem.prove(&statement, &witness);
-        assert!(setmem.verify(&statement, &prf));
+      fn spend_coin() {
+          // setup
+        let veksel = Veksel::new();
+        let coins = Coins::new();
+
+        let (coin_r, coin) = veksel.make_dummy_coin();
+        println!("{:?} {:?}", coin_r, coin);
+        let (coins, coin_w) = coins.add_coin_with_proof(&coin);
+        let (rerand_coin, proof) = veksel.spend_coin(&coins, &coin, &coin_w);
+        assert!( veksel.verify_spent_coin(&coins, rerand_coin, &proof) ); 
+
     }
 
 }

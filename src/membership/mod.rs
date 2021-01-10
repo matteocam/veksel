@@ -50,6 +50,7 @@ pub type ElemCommitment = <PedersenCommitment<RistrettoPoint> as Commitment>::In
 pub type ElemCommRandomness = Integer;
 
 
+
 // NEXT: Add specific generics to SetMemStatement,etc.
 
 
@@ -68,12 +69,13 @@ impl SetMembership<RandState<'_>, ThreadRng> {
     // performs a setup
     pub fn new() -> Self {
         // Generate parameters and crs
-        let params = Parameters::from_security_level(128).unwrap();
+        //let params = Parameters::from_security_level(128).unwrap();
+        let params = Parameters::from_curve::<Scalar>().unwrap().0;
         let mut rng1 = RandState::new();
         rng1.seed(&Integer::from(13));
         let mut rng2 = thread_rng();
 
-        let crs = SetMemProtocol::setup(&params, &mut rng1, &mut rng2)
+        let crs = SetMemProtocol::setup_default(&params, &mut rng1, &mut rng2)
             .unwrap()
             .crs;
 

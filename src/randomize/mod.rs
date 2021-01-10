@@ -20,6 +20,11 @@ pub struct Proof(R1CSProof);
 pub type InnerCommRandomness = curve::Fp;
 pub type InnerCommitment = PointValue;
 
+pub fn dummy_comm() -> PointValue
+{
+    curve::identity()
+}
+
 pub struct Rerandomization {
     bp_gens: BulletproofGens,
     pc_gens: PedersenGens,
@@ -51,12 +56,12 @@ impl Rerandomization {
     ///
     /// * The randomness used in the blinding
     /// * The resulting blinded commitment (point on Jabberwock).
-    pub fn find_permissible(&self, inner_open: PointValue) -> (curve::Fp, PointValue) {
+    pub fn find_permissible(&self, inner_open: PointValue) -> (InnerCommRandomness, PointValue) {
         self.statement
             .find_permissible_randomness(&mut OsRng, inner_open)
     }
 
-    pub fn rerandomize_comm(&self, inner_r:curve::Fp, inner_open:PointValue) -> PointValue {
+    pub fn rerandomize_comm(&self, inner_r:InnerCommRandomness, inner_open:PointValue) -> PointValue {
         self.statement.rerandomize.compute(inner_r, inner_open)
     }
 
@@ -87,10 +92,14 @@ impl Rerandomization {
         inner_r: InnerCommRandomness,     // witness (inner commitment randomness)
         inner_open: PointValue, // statement
     ) -> (Proof, CompressedRistretto) {
+        use std::{println as info, println as warn};
+
         let transcript = Transcript::new(b"Randomize");
         let mut prover = Prover::new(&self.pc_gens, transcript);
 
         let comm = self.rerandomize_comm(inner_r, inner_open);
+        println!("{:?} {:?}", inner_r, inner_open);
+
 
         let witness = self.statement.witness(comm, -inner_r);
 
