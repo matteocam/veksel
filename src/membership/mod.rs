@@ -36,7 +36,6 @@ use std::cell::RefCell;
 use rug::rand::{MutRandState, RandState};
 use rug::Integer;
 
-
 // TODO: (at some point) Abstract curves we are using through generics
 pub type SetMemStatement = SetMemStatementGen<Rsa2048, RistrettoPoint>;
 pub type SetMemWitness = SetMemWitnessGen<Rsa2048>;

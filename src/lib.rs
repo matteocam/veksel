@@ -43,7 +43,7 @@ pub fn bytes_to_integer(bytes:&[u8]) -> Integer {
 /// Joins a membership proof and a re-randomization proof
 ///
 /// Implements Serde::Serialize for serialization.
-// #[derive(Deserialize, Serialize)] // XXX: Temporarily removed: SetMemProof does not have a serializable implementation yet
+#[derive(Serialize)]
 struct Proof {
     outer_comm_risetto: CompressedRistretto, // outer commitment (group of known order)
     setmembership_proof: SetMemProof, // proof of membership for outer commitment

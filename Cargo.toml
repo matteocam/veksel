@@ -10,7 +10,7 @@ cpsnarks-set = {git = "https://github.com/matteocam/cpsnarks-set", default-featu
 accumulator = { git = "https://github.com/matteocam/cpsnarks-set-accumulator" }
 
 curve25519-dalek = "3.0.0"
-rug = "=1.7.0"
+rug = { version = "=1.7.0", features = ["serde", "integer"] }
 ark-bls12-381 = { git = "https://github.com/arkworks-rs/curves", default-features = false, features = [ "curve" ] }
 gridiron = "0.8"
 hex = "0.4.2"
