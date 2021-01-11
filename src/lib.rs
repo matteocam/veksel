@@ -4,6 +4,8 @@ extern crate test;
 
 mod membership;
 mod randomize;
+#[cfg(test)]
+mod tests;
 
 use rand::rngs::*;
 use rand::{thread_rng, CryptoRng, Rng, RngCore};
@@ -191,29 +193,3 @@ impl<'a> Veksel<'a> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::membership::*;
-    use super::*;
-    use rand::rngs::*;
-    use rand::{thread_rng, CryptoRng, RngCore};
-
-    use rug::rand::{MutRandState, RandState};
-    use rug::Integer;
-
-    use super::membership::tests::*;
-    use std::{println as info, println as warn};
-
-    #[test]
-    fn spend_coin() {
-        // setup
-        let veksel = Veksel::new();
-        let coins = Coins::new();
-
-        let (coin_r, coin) = veksel.make_dummy_coin();
-        println!("{:?} {:?}", coin_r, coin);
-        let (coins, coin_w) = coins.add_coin_with_proof(&coin);
-        let (rerand_coin, proof) = veksel.spend_coin(&coins, &coin, &coin_w);
-        assert!(veksel.verify_spent_coin(&coins, rerand_coin, &proof));
-    }
-}
