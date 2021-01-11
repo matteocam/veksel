@@ -23,7 +23,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 
 use rug::rand::{MutRandState, RandState};
-use rug::Integer;
+use rug::{integer, Integer};
 
 pub type OuterCommitment = ElemCommitment;
 pub type OuterCommRandomness = ElemCommRandomness;
@@ -34,16 +34,18 @@ pub type Coin = InnerCommitment;
 
 use bulletproofs::{BulletproofGens, PedersenGens};
 
+pub fn bytes_to_integer(bytes:&[u8]) -> Integer {
+    Integer::from_digits(bytes, integer::Order::Lsf)
+}
+
 /// Joins a membership proof and a re-randomization proof
 ///
 /// Implements Serde::Serialize for serialization.
 // #[derive(Deserialize, Serialize)] // XXX: Temporarily removed: SetMemProof does not have a serializable implementation yet
 struct Proof {
-    outer_comm_rsa: OuterCommitment, // outer commitment (group of unknown order)
     outer_comm_risetto: CompressedRistretto, // outer commitment (group of known order)
     setmembership_proof: SetMemProof, // proof of membership for outer commitment
     rerandomize_proof: randomize::Proof, // proof that opening is a rerandomization of the nested commitment
-    modeq_proof: (),                     // proof of congruence between outer commitments
 }
 
 struct Statement<'a> {
@@ -119,15 +121,18 @@ impl<'a> Veksel<'a> {
             "coin is not permissible, the proof will not be valid"
         );
 
+        
+
         // XXX: This produces something with different params than BP
         // commit to the coin in the RSA group
         let coin_as_acc_elem = Integer::from(coin.clone());
-        let outer_r_rsa = Integer::from(0x1337); // randomness for the integer commitment (in the group of unknown order) // XXX: fixed randomness
-        let outer_comm_rsa =
-            (self.setmem.borrow_mut()).commit_to_set_element(&coin_as_acc_elem, &outer_r_rsa);
+        // let outer_r_rsa = Integer::from(0x1337); // randomness for the integer commitment (in the group of unknown order) // XXX: fixed randomness
+        // let outer_comm_rsa =
+        //     (self.setmem.borrow_mut()).commit_to_set_element(&coin_as_acc_elem, &outer_r_rsa);
 
         // commit to the coin in the Risetto25519 group
         let outer_r_risetto = Scalar::random(&mut OsRng); // randomness for the field commitment (in the group of known order)
+        //let outer_comm = (self.setmem.borrow()).commit_to_set_element(coin.into(), outer_r_risetto);
 
         // randomness to "add" to inner commitment
         let inner_delta_random = InnerCommRandomness::random(&mut OsRng);
@@ -141,13 +146,13 @@ impl<'a> Veksel<'a> {
 
         // prove set membership
         let setmem_x = SetMemStatement {
-            c_e_q: outer_comm.clone(),
+            c_e_q: outer_comm_risetto.decompress().unwrap(),
             c_p: coins.accum.value.clone(),
         };
 
         let setmem_w = SetMemWitness {
             e: coin_as_acc_elem.clone(),
-            r_q: outer_r.clone(),
+            r_q: bytes_to_integer(outer_r_risetto.as_bytes()),
             w: coin_w.clone(),
         };
 
@@ -166,24 +171,22 @@ impl<'a> Veksel<'a> {
          */
 
         let proof = Proof {
-            outer_comm_rsa, // outer commitment (Risetto25519 point)
-            outer_comm_risetto,
+            outer_comm_risetto, // outer commitment (Risetto25519 point)
             setmembership_proof,
             rerandomize_proof,
-            modeq_proof: (),
         };
 
         (rerandomized_coin, proof)
     }
     pub fn verify_spent_coin(&self, coins: &Coins, rerand_coin: Coin, prf: &Proof) -> bool {
         let setmem_x = SetMemStatement {
-            c_e_q: prf.outer_comm.clone(),
+            c_e_q: prf.outer_comm_risetto.decompress().unwrap(),
             c_p: coins.accum.value.clone(),
         };
-        let setmem_ok = (self.setmem.borrow()).verify(&setmem_x, &prf.membership);
+        let setmem_ok = (self.setmem.borrow()).verify(&setmem_x, &prf.setmembership_proof);
         let rerand_ok = self
             .rerand
-            .verify(&prf.randomize, prf.outer_comm.compress(), rerand_coin);
+            .verify(&prf.rerandomize_proof, prf.outer_comm_risetto, rerand_coin);
         setmem_ok && rerand_ok
     }
 }

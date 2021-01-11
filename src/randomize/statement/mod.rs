@@ -17,7 +17,9 @@ use misc::*;
 pub use permissible::{Permissible, PermissibleWitness};
 pub use window::{FixScalarMult, FixScalarMultWitness};
 
-use rug::{integer, Integer};
+use rug::{Integer};
+
+use crate::bytes_to_integer;
 
 impl curve::Fp {
     pub fn random<R: RngCore>(rng: &mut R) -> Self {
@@ -146,7 +148,7 @@ impl From<PointValue> for Integer {
             Permissible::new(curve::param_d()).is_permissible(point),
             "converting a non-permissible point to an integer is undefined"
         );
-        Integer::from_digits(point.x.as_bytes(), integer::Order::Lsf)
+        bytes_to_integer(point.x.as_bytes())
     }
 }
 
