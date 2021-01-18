@@ -27,6 +27,9 @@ use curve25519_dalek::scalar::Scalar;
 use rug::rand::{MutRandState, RandState};
 use rug::{integer, Integer};
 
+use rug_binserial::*;
+use proofsize_derive::*;
+
 pub type OuterCommitment = ElemCommitment;
 pub type OuterCommRandomness = ElemCommRandomness;
 
@@ -43,7 +46,7 @@ pub fn bytes_to_integer(bytes:&[u8]) -> Integer {
 /// Joins a membership proof and a re-randomization proof
 ///
 /// Implements Serde::Serialize for serialization.
-#[derive(Serialize)]
+#[derive(Serialize, ProofSize)]
 struct Proof {
     outer_comm_risetto: CompressedRistretto, // outer commitment (group of known order)
     setmembership_proof: SetMemProof, // proof of membership for outer commitment

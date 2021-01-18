@@ -14,7 +14,9 @@ use curve25519_dalek::scalar::Scalar;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+use proofsize_derive::*;
+
+#[derive(Serialize, Deserialize, Debug, ProofSize)]
 pub struct Proof(R1CSProof);
 
 pub type InnerCommRandomness = curve::Fp;

@@ -60,3 +60,19 @@ fn spend_coin() {
     let (rerand_coin, proof) = veksel.spend_coin(&coins, &coin, &coin_w);
     assert!(veksel.verify_spent_coin(&coins, rerand_coin, &proof));
 }
+
+#[test]
+fn prf_size() {
+    // setup
+    let veksel = Veksel::new();
+    let coins = Coins::new();
+
+    let (coin_r, coin) = veksel.make_dummy_coin();
+    println!("{:?} {:?}", coin_r, coin);
+    let (coins, coin_w) = coins.add_coin_with_proof(&coin);
+    let (rerand_coin, proof) = veksel.spend_coin(&coins, &coin, &coin_w);
+    
+    let sz = proof.proof_size();
+    println!("proof_size(): {}", sz);
+    println!("serializing size: {}", bincode::serialize(&proof).unwrap().len());
+}
