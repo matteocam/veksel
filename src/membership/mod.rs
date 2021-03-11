@@ -191,14 +191,3 @@ pub mod tests {
     }
 }
 
-/*
-mod tests {
-    use super::*;
-
-    fn test_proof() {
-        let r = Rerandomization::new();
-
-        // let (proof, comm) = r.prove(Scalar::one(), )
-    }
-}
-*/
