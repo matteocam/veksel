@@ -1,6 +1,6 @@
 # Veksel
 
-This is a benchmarking implementation for the anonymous payment system [Veksel](link). It is not for production purposes.
+This is a benchmarking implementation for the anonymous payment system [Veksel](https://eprint.iacr.org/2021/327). It is not for production purposes.
 
 This repository contains:
 - Sage scripts to generate the Jabberwock curve over Ristretto25519 scalar field (`curve` folder)
